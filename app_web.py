@@ -1,7 +1,7 @@
 import datetime
-import sqlite3
 import pandas as pd
 import streamlit as st
+from supabase import create_client, Client
 
 # ==========================================
 # CONFIGURAZIONE PAGINA
@@ -14,138 +14,79 @@ st.set_page_config(
 )
 
 # ==========================================
-# INIZIALIZZAZIONE DATABASE (SQLite)
+# INIZIALIZZAZIONE SUPABASE (CLOUD DATABASE)
 # ==========================================
-DB_FILE = "autonoleggio.db"
+@st.cache_resource
+def init_supabase() -> Client:
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-def get_db_connection():
-    conn = sqlite3.connect(DB_FILE)
-    conn.row_factory = sqlite3.Row
-    return conn
-
-def init_db():
-    with get_db_connection() as conn:
-        cursor = conn.cursor()
-        
-        # Tabella Veicoli
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS veicoli (
-                targa TEXT PRIMARY KEY,
-                marca TEXT NOT NULL,
-                modello TEXT NOT NULL,
-                categoria TEXT NOT NULL,
-                prezzo_giornaliero REAL NOT NULL,
-                anno INTEGER,
-                stato TEXT DEFAULT 'Disponibile'
-            )
-        ''')
-        
-        # Tabella Noleggi
-        cursor.execute('''
-            CREATE TABLE IF NOT EXISTS noleggi (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                targa TEXT NOT NULL,
-                cliente_nome TEXT NOT NULL,
-                cliente_documento TEXT NOT NULL,
-                data_inizio TEXT NOT NULL,
-                data_fine TEXT NOT NULL,
-                giorni INTEGER NOT NULL,
-                costo_totale REAL NOT NULL,
-                stato TEXT DEFAULT 'Attivo',
-                FOREIGN KEY (targa) REFERENCES veicoli (targa)
-            )
-        ''')
-        
-        conn.commit()
-
-init_db()
+supabase = init_supabase()
 
 # ==========================================
-# FUNZIONI HELPER DB
+# FUNZIONI HELPER DB (SUPABASE)
 # ==========================================
 def get_veicoli(solo_disponibili=False):
-    conn = get_db_connection()
-    try:
-        query = "SELECT * FROM veicoli"
-        if solo_disponibili:
-            query += " WHERE stato = 'Disponibile'"
-        return pd.read_sql_query(query, conn)
-    finally:
-        conn.close()
+    query = supabase.table("veicoli").select("*")
+    if solo_disponibili:
+        query = query.eq("stato", "Disponibile")
+    data = query.execute().data
+    return pd.DataFrame(data)
 
 def inserisci_veicolo(targa, marca, modello, categoria, prezzo, anno):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute(
-            "INSERT INTO veicoli VALUES (?, ?, ?, ?, ?, ?, 'Disponibile')",
-            (targa.upper(), marca, modello, categoria, prezzo, anno)
-        )
-        conn.commit()
-        return True, "Veicolo aggiunto con successo!"
-    except sqlite3.IntegrityError:
-        return False, f"Targa {targa.upper()} già presente nel sistema."
-    finally:
-        conn.close()
+    targa_formatted = targa.upper()
+    
+    # Controlla se la targa esiste già
+    check = supabase.table("veicoli").select("targa").eq("targa", targa_formatted).execute().data
+    if check:
+        return False, f"Targa {targa_formatted} già presente nel sistema."
+        
+    data = {
+        "targa": targa_formatted,
+        "marca": marca,
+        "modello": modello,
+        "categoria": categoria,
+        "prezzo_giornaliero": prezzo,
+        "anno": anno,
+        "stato": "Disponibile"
+    }
+    supabase.table("veicoli").insert(data).execute()
+    return True, "Veicolo aggiunto con successo!"
 
 def elimina_veicolo(targa):
     """Elimina un singolo veicolo tramite targa"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM veicoli WHERE targa = ?", (targa,))
-        conn.commit()
-    finally:
-        conn.close()
+    supabase.table("veicoli").delete().eq("targa", targa).execute()
 
 def reset_parco_veicoli():
     """Elimina TUTTI i veicoli dal parco auto"""
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("DELETE FROM veicoli")
-        conn.commit()
-    finally:
-        conn.close()
+    supabase.table("veicoli").delete().neq("targa", "").execute()
 
 def crea_noleggio(targa, cliente, doc, data_inz, data_fn, giorni, totale):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute('''
-            INSERT INTO noleggi (targa, cliente_nome, cliente_documento, data_inizio, data_fine, giorni, costo_totale, stato)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Attivo')
-        ''', (targa, cliente, doc, str(data_inz), str(data_fn), giorni, totale))
-        
-        cursor.execute("UPDATE veicoli SET stato = 'Noleggiato' WHERE targa = ?", (targa,))
-        conn.commit()
-    finally:
-        conn.close()
+    data_noleggio = {
+        "targa": targa,
+        "cliente_nome": cliente,
+        "cliente_documento": doc,
+        "data_inizio": str(data_inz),
+        "data_fine": str(data_fn),
+        "giorni": giorni,
+        "costo_totale": totale,
+        "stato": "Attivo"
+    }
+    supabase.table("noleggi").insert(data_noleggio).execute()
+    supabase.table("veicoli").update({"stato": "Noleggiato"}).eq("targa", targa).execute()
 
 def chiudi_noleggio(noleggio_id, targa):
-    conn = get_db_connection()
-    cursor = conn.cursor()
-    try:
-        cursor.execute("UPDATE noleggi SET stato = 'Completato' WHERE id = ?", (noleggio_id,))
-        cursor.execute("UPDATE veicoli SET stato = 'Disponibile' WHERE targa = ?", (targa,))
-        conn.commit()
-    finally:
-        conn.close()
+    supabase.table("noleggi").update({"stato": "Completato"}).eq("id", noleggio_id).execute()
+    supabase.table("veicoli").update({"stato": "Disponibile"}).eq("targa", targa).execute()
 
 def get_noleggi(stato="Attivo"):
-    conn = get_db_connection()
-    try:
-        query = "SELECT * FROM noleggi WHERE stato = ?"
-        return pd.read_sql_query(query, conn, params=(stato,))
-    finally:
-        conn.close()
+    data = supabase.table("noleggi").select("*").eq("stato", stato).execute().data
+    return pd.DataFrame(data)
 
 def get_tutti_noleggi():
-    conn = get_db_connection()
-    try:
-        return pd.read_sql_query("SELECT * FROM noleggi ORDER BY id DESC", conn)
-    finally:
-        conn.close()
+    data = supabase.table("noleggi").select("*").order("id", desc=True).execute().data
+    return pd.DataFrame(data)
 
 # ==========================================
 # INTERFACCIA UTENTE (STREAMLIT)
@@ -217,7 +158,6 @@ elif menu == "🚙 Gestione Flotta":
         if df_veicoli.empty:
             st.info("Nessun veicolo presente nel parco auto.")
         else:
-            # Lista dinamica con pulsanti di eliminazione per singolo veicolo
             for idx, row in df_veicoli.iterrows():
                 col1, col2, col3, col4, col5 = st.columns([2, 3, 2, 2, 2])
                 col1.write(f"**{row['targa']}**")
@@ -299,7 +239,7 @@ elif menu == "🔑 Nuovo Noleggio":
             data_fine = col2.date_input("Data Fine Noleggio", datetime.date.today() + datetime.timedelta(days=3))
             
             giorni = (data_fine - data_inizio).days
-            prezzo_unitario = auto_selezionata["prezzo_giornaliero"]
+            prezzo_unitario = float(auto_selezionata["prezzo_giornaliero"])
             
             if giorni <= 0:
                 st.error("⚠️ La data di fine noleggio deve essere successiva alla data di inizio.")
@@ -354,7 +294,7 @@ elif menu == "🔄 Restituzione Veicolo":
         col_det1.write(f"**Cliente:** {noleggio_sel['cliente_nome']}")
         col_det1.write(f"**Documento:** {noleggio_sel['cliente_documento']}")
         col_det2.write(f"**Periodo:** dal {noleggio_sel['data_inizio']} al {noleggio_sel['data_fine']}")
-        col_det2.write(f"**Totale Noleggio:** {noleggio_sel['costo_totale']:.2f} €")
+        col_det2.write(f"**Totale Noleggio:** {float(noleggio_sel['costo_totale']):.2f} €")
         
         if st.button("✅ Registra Rientro Veicolo", type="primary"):
             chiudi_noleggio(noleggio_sel["id"], noleggio_sel["targa"])
