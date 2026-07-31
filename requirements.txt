@@ -1,4 +1,3 @@
 streamlit
 pandas
 sqlalchemy
-st-gsheets-connection
