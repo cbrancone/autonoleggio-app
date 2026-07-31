@@ -1,4 +1,5 @@
 streamlit
 pandas
+supbase
 sqlalchemy
 st-gsheets-connection
