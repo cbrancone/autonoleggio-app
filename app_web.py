@@ -1,10 +1,10 @@
 import datetime
-import sqlite3
 import pandas as pd
 import streamlit as st
+from supabase import create_client, Client
 
 # ==========================================
-# CONFIGURAZIONE PAGINA
+# 1. CONFIGURAZIONE PAGINA
 # ==========================================
 st.set_page_config(
     page_title="Autonoleggio Pro",
@@ -13,92 +13,78 @@ st.set_page_config(
 )
 
 # ==========================================
-# DATABASE SQLITE NATIVO (NO GOOGLE CLOUD)
+# 2. CONNESSIONE A SUPABASE
 # ==========================================
-DB_FILE = "autonoleggio.db"
+@st.cache_resource
+def init_supabase() -> Client:
+    """Inizializza il client Supabase recuperando i secret"""
+    try:
+        url = st.secrets["supabase"]["SUPABASE_URL"]
+        key = st.secrets["supabase"]["SUPABASE_KEY"]
+        return create_client(url, key)
+    except Exception as e:
+        st.error("Errore di connessione a Supabase. Controlla la configurazione dei Secrets.")
+        st.stop()
 
-def init_db():
-    """Crea le tabelle se non esistono già"""
-    with sqlite3.connect(DB_FILE) as conn:
-        cursor = conn.cursor()
-        # Tabella Veicoli
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS veicoli (
-                targa TEXT PRIMARY KEY,
-                marca TEXT,
-                modello TEXT,
-                categoria TEXT,
-                prezzo_giornaliero REAL,
-                anno INTEGER,
-                stato TEXT
-            )
-        """)
-        # Tabella Noleggi
-        cursor.execute("""
-            CREATE TABLE IF NOT EXISTS noleggi (
-                id INTEGER PRIMARY KEY AUTOINCREMENT,
-                targa TEXT,
-                cliente_nome TEXT,
-                cliente_documento TEXT,
-                data_inizio TEXT,
-                data_fine TEXT,
-                giorni INTEGER,
-                costo_totale REAL,
-                stato TEXT
-            )
-        """)
-        conn.commit()
+supabase = init_supabase()
 
-# Inizializza il database all'avvio
-init_db()
-
+# ==========================================
+# 3. FUNZIONI DATABASE (SUPABASE)
+# ==========================================
 def leggi_tabella(nome_tabella):
-    """Legge una tabella dal database SQL"""
-    with sqlite3.connect(DB_FILE) as conn:
-        return pd.read_sql_query(f"SELECT * FROM {nome_tabella}", conn)
+    """Legge tutti i record da una tabella Supabase"""
+    try:
+        response = supabase.table(nome_tabella).select("*").execute()
+        data = response.data
+        return pd.DataFrame(data) if data else pd.DataFrame()
+    except Exception as e:
+        st.error(f"Errore nella lettura della tabella {nome_tabella}: {e}")
+        return pd.DataFrame()
 
 def salva_veicolo(targa, marca, modello, categoria, prezzo, anno):
-    """Inserisce un nuovo veicolo"""
-    with sqlite3.connect(DB_FILE) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO veicoli (targa, marca, modello, categoria, prezzo_giornaliero, anno, stato)
-            VALUES (?, ?, ?, ?, ?, ?, 'Disponibile')
-        """, (targa, marca, modello, categoria, prezzo, anno))
-        conn.commit()
+    """Inserisce un nuovo veicolo su Supabase"""
+    data = {
+        "targa": targa,
+        "marca": marca,
+        "modello": modello,
+        "categoria": categoria,
+        "prezzo_giornaliero": prezzo,
+        "anno": anno,
+        "stato": "Disponibile"
+    }
+    supabase.table("veicoli").insert(data).execute()
 
 def elimina_veicolo(targa):
-    """Elimina un veicolo"""
-    with sqlite3.connect(DB_FILE) as conn:
-        cursor = conn.cursor()
-        cursor.execute("DELETE FROM veicoli WHERE targa = ?", (targa,))
-        conn.commit()
+    """Elimina un veicolo da Supabase"""
+    supabase.table("veicoli").delete().eq("targa", targa).execute()
 
 def registra_noleggio(targa, cliente, doc, d_inizio, d_fine, giorni, totale):
-    """Registra un noleggio e aggiorna lo stato dell'auto"""
-    with sqlite3.connect(DB_FILE) as conn:
-        cursor = conn.cursor()
-        cursor.execute("""
-            INSERT INTO noleggi (targa, cliente_nome, cliente_documento, data_inizio, data_fine, giorni, costo_totale, stato)
-            VALUES (?, ?, ?, ?, ?, ?, ?, 'Attivo')
-        """, (targa, cliente, doc, str(d_inizio), str(d_fine), giorni, totale))
-        
-        cursor.execute("UPDATE veicoli SET stato = 'Noleggiato' WHERE targa = ?", (targa,))
-        conn.commit()
+    """Registra un nuovo noleggio e aggiorna lo stato dell'auto"""
+    data_noleggio = {
+        "targa": targa,
+        "cliente_nome": cliente,
+        "cliente_documento": doc,
+        "data_inizio": str(d_inizio),
+        "data_fine": str(d_fine),
+        "giorni": giorni,
+        "costo_totale": totale,
+        "stato": "Attivo"
+    }
+    # Inserisce la prenotazione
+    supabase.table("noleggi").insert(data_noleggio).execute()
+    # Cambia lo stato dell'auto a 'Noleggiato'
+    supabase.table("veicoli").update({"stato": "Noleggiato"}).eq("targa", targa).execute()
 
 def chiudi_noleggio(id_noleggio, targa):
-    """Chiude un noleggio attivo e libera l'auto"""
-    with sqlite3.connect(DB_FILE) as conn:
-        cursor = conn.cursor()
-        cursor.execute("UPDATE noleggi SET stato = 'Completato' WHERE id = ?", (id_noleggio,))
-        cursor.execute("UPDATE veicoli SET stato = 'Disponibile' WHERE targa = ?", (targa,))
-        conn.commit()
+    """Chiude un noleggio attivo e ripristina l'auto a 'Disponibile'"""
+    supabase.table("noleggi").update({"stato": "Completato"}).eq("id", id_noleggio).execute()
+    supabase.table("veicoli").update({"stato": "Disponibile"}).eq("targa", targa).execute()
 
 # ==========================================
-# INTERFACCIA UTENTE (STREAMLIT)
+# 4. INTERFACCIA UTENTE (STREAMLIT)
 # ==========================================
 st.sidebar.title("🚘 Autonoleggio Pro")
-st.sidebar.caption("Database Locale Integrato (Senza Cloud)")
+st.sidebar.caption("Sincronizzato con Supabase Cloud")
 
 menu = st.sidebar.radio(
     "Navigazione Menu:",
@@ -112,7 +98,7 @@ menu = st.sidebar.radio(
 )
 
 # ------------------------------------------
-# 1. DASHBOARD
+# A. DASHBOARD
 # ------------------------------------------
 if menu == "📊 Dashboard":
     st.title("📊 Dashboard Panoramica")
@@ -120,25 +106,25 @@ if menu == "📊 Dashboard":
     df_veicoli = leggi_tabella("veicoli")
     df_noleggi = leggi_tabella("noleggi")
     
-    df_attivi = df_noleggi[df_noleggi["stato"] == "Attivo"] if not df_noleggi.empty else pd.DataFrame()
+    df_attivi = df_noleggi[df_noleggi["stato"] == "Attivo"] if not df_noleggi.empty and "stato" in df_noleggi.columns else pd.DataFrame()
     
     col1, col2, col3, col4 = st.columns(4)
     col1.metric("Totale Flotta", len(df_veicoli) if not df_veicoli.empty else 0)
-    col2.metric("Disponibili", len(df_veicoli[df_veicoli['stato'] == 'Disponibile']) if not df_veicoli.empty else 0)
+    col2.metric("Disponibili", len(df_veicoli[df_veicoli['stato'] == 'Disponibile']) if not df_veicoli.empty and 'stato' in df_veicoli.columns else 0)
     col3.metric("Noleggi Attivi", len(df_attivi))
     
-    fatturato = pd.to_numeric(df_noleggi['costo_totale'], errors='coerce').sum() if not df_noleggi.empty else 0.0
+    fatturato = pd.to_numeric(df_noleggi['costo_totale'], errors='coerce').sum() if not df_noleggi.empty and 'costo_totale' in df_noleggi.columns else 0.0
     col4.metric("Fatturato Totale", f"{fatturato:.2f} €")
     
     st.markdown("---")
     st.subheader("📌 Stato Flotta Veicoli")
-    if not df_veicoli.empty:
+    if not df_veicoli.empty and all(k in df_veicoli.columns for k in ['targa', 'marca', 'modello', 'categoria', 'prezzo_giornaliero', 'stato']):
         st.dataframe(df_veicoli[['targa', 'marca', 'modello', 'categoria', 'prezzo_giornaliero', 'stato']], use_container_width=True, hide_index=True)
     else:
-        st.info("Nessun veicolo registrato nel database.")
+        st.info("Nessun veicolo registrato nel database Supabase.")
 
 # ------------------------------------------
-# 2. GESTIONE FLOTTA
+# B. GESTIONE FLOTTA
 # ------------------------------------------
 elif menu == "🚙 Gestione Flotta":
     st.title("🚙 Gestione Flotta Veicoli")
@@ -161,7 +147,7 @@ elif menu == "🚙 Gestione Flotta":
                         st.error(f"La targa {targa} esiste già nel database.")
                     else:
                         salva_veicolo(targa, marca, modello, categoria, prezzo, anno)
-                        st.success(f"Veicolo {targa} salvato con successo!")
+                        st.success(f"Veicolo {targa} salvato su Supabase!")
                         st.rerun()
                 else:
                     st.warning("Compila tutti i campi obbligatori.")
@@ -182,13 +168,13 @@ elif menu == "🚙 Gestione Flotta":
             st.info("Nessun veicolo presente.")
 
 # ------------------------------------------
-# 3. NUOVO NOLEGGIO
+# C. NUOVO NOLEGGIO
 # ------------------------------------------
 elif menu == "🔑 Nuovo Noleggio":
     st.title("🔑 Registra Noleggio")
     
     df_veicoli = leggi_tabella("veicoli")
-    df_disp = df_veicoli[df_veicoli['stato'] == 'Disponibile'] if not df_veicoli.empty else pd.DataFrame()
+    df_disp = df_veicoli[df_veicoli['stato'] == 'Disponibile'] if not df_veicoli.empty and 'stato' in df_veicoli.columns else pd.DataFrame()
     
     if df_disp.empty:
         st.warning("Nessun veicolo disponibile al momento per il noleggio.")
@@ -219,13 +205,13 @@ elif menu == "🔑 Nuovo Noleggio":
                     st.error("Inserisci date valide e compila i dati del cliente.")
 
 # ------------------------------------------
-# 4. RESTITUZIONE
+# D. RESTITUZIONE
 # ------------------------------------------
 elif menu == "🔄 Restituzione":
     st.title("🔄 Rientro Veicolo")
     
     df_noleggi = leggi_tabella("noleggi")
-    df_attivi = df_noleggi[df_noleggi["stato"] == "Attivo"] if not df_noleggi.empty else pd.DataFrame()
+    df_attivi = df_noleggi[df_noleggi["stato"] == "Attivo"] if not df_noleggi.empty and 'stato' in df_noleggi.columns else pd.DataFrame()
     
     if df_attivi.empty:
         st.info("Nessun noleggio attualmente in corso.")
@@ -240,7 +226,7 @@ elif menu == "🔄 Restituzione":
             st.rerun()
 
 # ------------------------------------------
-# 5. STORICO NOLEGGI
+# E. STORICO NOLEGGI
 # ------------------------------------------
 elif menu == "📜 Storico Noleggi":
     st.title("📜 Storico Noleggi Registrati")
