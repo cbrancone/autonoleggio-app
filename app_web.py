@@ -1,7 +1,5 @@
 import datetime
-import gspread
 import pandas as pd
-from google.oauth2.service_account import Credentials
 import streamlit as st
 
 # ==========================================
@@ -13,33 +11,45 @@ st.set_page_config(
 
 
 # ==========================================
-# CONNESSIOINE A GOOGLE SHEETS (EXCEL CONDIVISO)
+# GESTIONE SICURA GOOGLE SHEETS
 # ==========================================
-@st.cache_resource
 def get_gspread_client():
+    import gspread
+    from google.oauth2.service_account import Credentials
+
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
-    # Recupera le credenziali dai Secrets di Streamlit
     credentials = Credentials.from_service_account_info(
         st.secrets["gcp_service_account"], scopes=scopes
     )
     return gspread.authorize(credentials)
 
 
-def get_worksheet(sheet_name):
-    client = get_gspread_client()
-    # Apri il foglio di calcolo condiviso dal nome
-    sheet = client.open("Autonoleggio_DB")
-    return sheet.worksheet(sheet_name)
-
-
-# --- FUNZIONI LETTURA / SCRITTURA ---
 def leggi_foglio(sheet_name):
-    ws = get_worksheet(sheet_name)
-    data = ws.get_all_records()
-    return pd.DataFrame(data)
+    # Struttura di ripiego per evitare il crash se Google Sheets fallisce
+    empty_df = pd.DataFrame()
+
+    # 1. Controlla se i Secrets di Google esistono su Streamlit Cloud
+    if "gcp_service_account" not in st.secrets:
+        st.error(
+            "⚠️ Manca la configurazione 'gcp_service_account' nei Secrets di Streamlit!"
+        )
+        return empty_df
+
+    # 2. Tenta la connessione al foglio
+    try:
+        client = get_gspread_client()
+        sheet = client.open("Autonoleggio_DB")
+        ws = sheet.worksheet(sheet_name)
+        data = ws.get_all_records()
+        return pd.DataFrame(data)
+    except Exception as e:
+        st.error(
+            f"⚠️ Errore durante la lettura del foglio '{sheet_name}': {e}"
+        )
+        return empty_df
 
 
 def aggiungi_riga(sheet_name, riga_lista):
