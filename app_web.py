@@ -14,18 +14,21 @@ st.set_page_config(
 # GESTIONE SICURA GOOGLE SHEETS
 # ==========================================
 def get_gspread_client():
-    import gspread
-    from google.oauth2.service_account import Credentials
+  import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    credentials = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"], scopes=scopes
-    )
-    return gspread.authorize(credentials)
+# 1. Inizializza la connessione nativa
+conn = st.connection("gsheets", type=GSheetsConnection)
 
+# 2. Leggere i dati dal foglio 'veicoli'
+df_veicoli = conn.read(worksheet="veicoli")
+
+
+# 3. Salvare nuovi dati (Aggiungere una nuova riga)
+def salva_veicolo(nuovo_df):
+    # 'ttl=0' forza l'aggiornamento immediato senza cache
+    conn.update(worksheet="veicoli", data=nuovo_df)
+    st.cache_data.clear()
 
 def leggi_foglio(sheet_name):
     # Struttura di ripiego per evitare il crash se Google Sheets fallisce
