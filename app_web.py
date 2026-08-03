@@ -1,6 +1,7 @@
 import datetime
 import pandas as pd
 import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 
 # ==========================================
 # CONFIGURAZIONE PAGINA
@@ -9,47 +10,26 @@ st.set_page_config(
     page_title="Autonoleggio Pro (Excel Cloud)", page_icon="🚗", layout="wide"
 )
 
-
 # ==========================================
-# GESTIONE SICURA GOOGLE SHEETS
+# CONNESSIONE A GOOGLE SHEETS
 # ==========================================
-def get_gspread_client():
-    import gspread
-    from google.oauth2.service_account import Credentials
-
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    credentials = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"], scopes=scopes
-    )
-    return gspread.authorize(credentials)
+conn = st.connection("gsheets", type=GSheetsConnection)
 
 
 def leggi_foglio(sheet_name):
-    # Struttura di ripiego per evitare il crash se Google Sheets fallisce
-    empty_df = pd.DataFrame()
-
-    # 1. Controlla se i Secrets di Google esistono su Streamlit Cloud
-    if "gcp_service_account" not in st.secrets:
-        st.error(
-            "⚠️ Manca la configurazione 'gcp_service_account' nei Secrets di Streamlit!"
-        )
-        return empty_df
-
-    # 2. Tenta la connessione al foglio
     try:
-        client = get_gspread_client()
-        sheet = client.open("Autonoleggio_DB")
-        ws = sheet.worksheet(sheet_name)
-        data = ws.get_all_records()
-        return pd.DataFrame(data)
+        # ttl=0 evita che Streamlit salvi dati vecchi in memoria
+        return conn.read(worksheet=sheet_name, ttl=0)
     except Exception as e:
-        st.error(
-            f"⚠️ Errore durante la lettura del foglio '{sheet_name}': {e}"
-        )
-        return empty_df
+        st.error(f"Errore lettura foglio {sheet_name}: {e}")
+        return pd.DataFrame()
+
+
+def salva_dati(sheet_name, df_aggiornato):
+    conn.update(worksheet=sheet_name, data=df_aggiornato)
+    st.cache_data.clear()
+
+
 # ==========================================
 # INTERFACCIA UTENTE (STREAMLIT)
 # ==========================================
@@ -142,18 +122,23 @@ elif menu == "🚙 Gestione Flotta":
                     ):
                         st.error(f"La targa {targa} esiste già nel foglio.")
                     else:
-                        aggiungi_riga(
-                            "veicoli",
+                        nuova_riga = pd.DataFrame(
                             [
-                                targa,
-                                marca,
-                                modello,
-                                categoria,
-                                prezzo,
-                                anno,
-                                "Disponibile",
-                            ],
+                                {
+                                    "targa": targa,
+                                    "marca": marca,
+                                    "modello": modello,
+                                    "categoria": categoria,
+                                    "prezzo_giornaliero": prezzo,
+                                    "anno": anno,
+                                    "stato": "Disponibile",
+                                }
+                            ]
                         )
+                        df_finale = pd.concat(
+                            [df_v, nuova_riga], ignore_index=True
+                        )
+                        salva_dati("veicoli", df_finale)
                         st.success(
                             f"Veicolo {targa} salvato sul foglio condiviso!"
                         )
@@ -171,7 +156,10 @@ elif menu == "🚙 Gestione Flotta":
                 )
                 if row["stato"] == "Disponibile":
                     if col_btn.button("🗑️ Elimina", key=f"del_{row['targa']}"):
-                        elimina_riga_veicolo(str(row["targa"]))
+                        df_nuovo = df_veicoli[
+                            df_veicoli["targa"] != row["targa"]
+                        ]
+                        salva_dati("veicoli", df_nuovo)
                         st.success(f"Veicolo {row['targa']} rimosso.")
                         st.rerun()
                 st.divider()
@@ -220,24 +208,32 @@ elif menu == "🔑 Nuovo Noleggio":
                         len(df_noleggi) + 1 if not df_noleggi.empty else 1
                     )
 
-                    # Inserisci nel foglio 'noleggi'
-                    aggiungi_riga(
-                        "noleggi",
+                    nuovo_nol = pd.DataFrame(
                         [
-                            nuovo_id,
-                            auto["targa"],
-                            cliente,
-                            doc,
-                            str(d_inizio),
-                            str(d_fine),
-                            giorni,
-                            totale,
-                            "Attivo",
-                        ],
+                            {
+                                "id": nuovo_id,
+                                "targa": auto["targa"],
+                                "cliente_nome": cliente,
+                                "cliente_documento": doc,
+                                "data_inizio": str(d_inizio),
+                                "data_fine": str(d_fine),
+                                "giorni": giorni,
+                                "costo_totale": totale,
+                                "stato": "Attivo",
+                            }
+                        ]
                     )
 
-                    # Aggiorna lo stato dell'auto nel foglio 'veicoli'
-                    aggiorna_stato_veicolo(str(auto["targa"]), "Noleggiato")
+                    df_noleggi_fin = pd.concat(
+                        [df_noleggi, nuovo_nol], ignore_index=True
+                    )
+                    salva_dati("noleggi", df_noleggi_fin)
+
+                    # Aggiorna lo stato dell'auto
+                    df_veicoli.loc[
+                        df_veicoli["targa"] == auto["targa"], "stato"
+                    ] = "Noleggiato"
+                    salva_dati("veicoli", df_veicoli)
 
                     st.success("Noleggio registrato sul foglio condiviso!")
                     st.balloons()
@@ -271,8 +267,19 @@ elif menu == "🔄 Restituzione":
         noleggio = opzioni[scelta]
 
         if st.button("✅ Registra Rientro", type="primary"):
-            aggiorna_stato_noleggio(noleggio["id"])
-            aggiorna_stato_veicolo(str(noleggio["targa"]), "Disponibile")
+            # Chiudi Noleggio
+            df_noleggi.loc[df_noleggi["id"] == noleggio["id"], "stato"] = (
+                "Completato"
+            )
+            salva_dati("noleggi", df_noleggi)
+
+            # Rendi auto disponibile
+            df_veicoli = leggi_foglio("veicoli")
+            df_veicoli.loc[
+                df_veicoli["targa"] == noleggio["targa"], "stato"
+            ] = "Disponibile"
+            salva_dati("veicoli", df_veicoli)
+
             st.success("Veicolo rientrato e foglio Excel aggiornato!")
             st.rerun()
 
