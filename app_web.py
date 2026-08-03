@@ -9,26 +9,35 @@ st.set_page_config(
     page_title="Autonoleggio Pro (Excel Cloud)", page_icon="🚗", layout="wide"
 )
 
-
 # ==========================================
-# GESTIONE GOOGLE SHEETS
+# GESTIONE SICURA GOOGLE SHEETS
 # ==========================================
 def get_gspread_client():
-    import streamlit as st
-from streamlit_gsheets import GSheetsConnection
+ import gspread
+ from google.oauth2.service_account import Credentials
+    
+    scopes = [
+        "https://www.googleapis.com/auth/spreadsheets",
+        "https://www.googleapis.com/auth/drive",
+    ]
+    credentials = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"], scopes=scopes
+    )
+    return gspread.authorize(credentials)
 
-# Connessione automatica al foglio
-conn = st.connection("gsheets", type=GSheetsConnection)
 
-# Per leggere un foglio:
-df_veicoli = conn.read(worksheet="veicoli")
+def leggi_foglio(sheet_name):
+    # Struttura di ripiego per evitare il crash se Google Sheets fallisce
+    empty_df = pd.DataFrame()
 
+    # 1. Controlla se i Secrets di Google esistono su Streamlit Cloud
     if "gcp_service_account" not in st.secrets:
         st.error(
             "⚠️ Manca la configurazione 'gcp_service_account' nei Secrets di Streamlit!"
         )
         return empty_df
 
+    # 2. Tenta la connessione al foglio
     try:
         client = get_gspread_client()
         sheet = client.open("Autonoleggio_DB")
@@ -40,6 +49,34 @@ df_veicoli = conn.read(worksheet="veicoli")
             f"⚠️ Errore durante la lettura del foglio '{sheet_name}': {e}"
         )
         return empty_df
+
+
+def aggiungi_riga(sheet_name, riga_lista):
+    ws = get_worksheet(sheet_name)
+    ws.append_row(riga_lista)
+
+
+def aggiorna_stato_veicolo(targa, nuovo_stato):
+    ws = get_worksheet("veicoli")
+    cell = ws.find(targa)
+    if cell:
+        # La colonna 'stato' è la 7a colonna
+        ws.update_cell(cell.row, 7, nuovo_stato)
+
+
+def elimina_riga_veicolo(targa):
+    ws = get_worksheet("veicoli")
+    cell = ws.find(targa)
+    if cell:
+        ws.delete_rows(cell.row)
+
+
+def aggiorna_stato_noleggio(noleggio_id):
+    ws = get_worksheet("noleggi")
+    cell = ws.find(str(noleggio_id))
+    if cell:
+        # La colonna 'stato' è la 9a colonna
+        ws.update_cell(cell.row, 9, "Completato")
 # ==========================================
 # INTERFACCIA UTENTE (STREAMLIT)
 # ==========================================
