@@ -14,21 +14,14 @@ st.set_page_config(
 # GESTIONE GOOGLE SHEETS
 # ==========================================
 def get_gspread_client():
-    import gspread
-    from google.oauth2.service_account import Credentials
+    import streamlit as st
+from streamlit_gsheets import GSheetsConnection
 
-    scopes = [
-        "https://www.googleapis.com/auth/spreadsheets",
-        "https://www.googleapis.com/auth/drive",
-    ]
-    credentials = Credentials.from_service_account_info(
-        st.secrets["gcp_service_account"], scopes=scopes
-    )
-    return gspread.authorize(credentials)
+# Connessione automatica al foglio
+conn = st.connection("gsheets", type=GSheetsConnection)
 
-
-def leggi_foglio(sheet_name):
-    empty_df = pd.DataFrame()
+# Per leggere un foglio:
+df_veicoli = conn.read(worksheet="veicoli")
 
     if "gcp_service_account" not in st.secrets:
         st.error(
