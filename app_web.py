@@ -18,7 +18,7 @@ st.set_page_config(
 # ==========================================
 @st.cache_resource
 def init_supabase() -> Client:
-    url = st.secrets["SUPABASE_URL"]
+    url = st.secrets["SUPABASE_https://autonoleggio-app-kujmsvy8gen5we7emmqxnv.streamlit.app/"]
     key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
 
