@@ -23,6 +23,8 @@ def get_gspread_client():
         st.secrets["gcp_service_account"], scopes=scopes
     )
     return gspread.authorize(credentials)
+
+
 def leggi_foglio(sheet_name):
     # Struttura di ripiego per evitare il crash se Google Sheets fallisce
     empty_df = pd.DataFrame()
