@@ -16,7 +16,7 @@ def get_gspread_client():
  import gspread
  from google.oauth2.service_account import Credentials
     
-    scopes = [
+    scopes = [ 
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
     ]
