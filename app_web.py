@@ -9,14 +9,12 @@ st.set_page_config(
     page_title="Autonoleggio Pro (Excel Cloud)", page_icon="🚗", layout="wide"
 )
 
-
 # ==========================================
 # GESTIONE SICURA GOOGLE SHEETS
 # ==========================================
 def get_gspread_client():
  import gspread
  from google.oauth2.service_account import Credentials
-
     scopes = [
         "https://www.googleapis.com/auth/spreadsheets",
         "https://www.googleapis.com/auth/drive",
