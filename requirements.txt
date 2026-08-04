@@ -1,3 +1,3 @@
 streamlit
 pandas
-supabase init
+supabase 
