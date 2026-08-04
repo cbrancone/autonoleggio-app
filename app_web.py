@@ -19,8 +19,8 @@ st.set_page_config(
 def init_supabase() -> Client:
     """Inizializza il client Supabase recuperando i secret"""
     try:
-        url = st.secrets["supabase"]["SUPABASE_URL"]
-        key = st.secrets["supabase"]["SUPABASE_KEY"]
+        url = st.secrets["supabase"]["https://nscnlpfidqvqshnbuevj.supabase.co"]
+        key = st.secrets["supabase"]["sb_publishable_1jqoJt46BWYtvKvSXYpR-Q_-2xKOTR0"]
         return create_client(url, key)
     except Exception as e:
         st.error("Errore di connessione a Supabase. Controlla la configurazione dei Secrets.")
