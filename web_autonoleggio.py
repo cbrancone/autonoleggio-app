@@ -1,48 +1,41 @@
 import streamlit as st
 import pandas as pd
-from datetime import datetime, date
-from streamlit_gsheets import GSheetsConnection
+import requests
+from datetime import date
 
 # ---------------------------------------------------------
-# 1. Configurazione Pagina e Layout
+# CONFIGURAZIONE URL (Sostituisci con i tuoi link)
 # ---------------------------------------------------------
-st.set_page_config(
-    page_title="Gestione Autonoleggio",
-    page_icon="🚗",
-    layout="wide"
-)
+# 1. URL fornito da Google Apps Script durante la distribuzione
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/INSERISCI_QUI_IL_TUO_ID_SCRIPT/exec"
 
+# 2. URL del tuo foglio Google per l'esportazione in CSV (sostituisci l'ID del foglio)
+# Nota: Il foglio deve essere impostato su "Chiunque abbia il link può visualizzare"
+SPREADSHEET_ID = "INSERISCI_QUI_L_ID_DEL_TUO_FOGLIO"
+CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv"
+
+# ---------------------------------------------------------
+# 1. Setup Pagina
+# ---------------------------------------------------------
+st.set_page_config(page_title="Gestione Autonoleggio", page_icon="🚗", layout="wide")
 st.title("🚗 Sistema Gestione Autonoleggio")
-st.markdown("Monitoraggio parco auto, preventivi noleggio e sync con Google Sheets.")
 
 # ---------------------------------------------------------
-# 2. Connessione a Google Sheets
+# 2. Lettura Dati via CSV
 # ---------------------------------------------------------
-conn = st.connection("gsheets", type=GSheetsConnection)
-
+@st.cache_data(ttl=2) # Pulisce la cache ogni 2 secondi per dati sempre freschi
 def carica_dati():
-    """Carica i dati dal foglio Google garantendo la presenza delle colonne corrette."""
     try:
-        data = conn.read(ttl=0)
-        # Nomi colonne esatti basati sul tuo foglio + colonne per la gestione noleggio
-        colonne_richieste = [
-            "Targa Auto", "Marca", "Modello", "Categoria", 
-            "Prezzo Giornaliero", "Anno immatricolazione", 
-            "Cliente", "Stato", "Data Inizio", "Data Fine", 
-            "Giorni", "Costo Totale (€)", "Note"
-        ]
-        for col in colonne_richieste:
-            if col not in data.columns:
-                data[col] = None
+        data = pd.read_csv(CSV_URL)
         return data
     except Exception as e:
-        st.error(f"Errore durante la connessione a Google Sheets: {e}")
+        st.error(f"Impossibile leggere il Foglio Google. Verifica che il link sia pubblico: {e}")
         return pd.DataFrame()
 
 df = carica_dati()
 
 # ---------------------------------------------------------
-# 3. Interfaccia Principale (Tab)
+# 3. Layout a Schede (Tab)
 # ---------------------------------------------------------
 tab_dash, tab_registro, tab_nuovo = st.tabs([
     "📊 Dashboard & Analytics",
@@ -50,120 +43,78 @@ tab_dash, tab_registro, tab_nuovo = st.tabs([
     "➕ Inserisci Veicolo / Noleggio"
 ])
 
-# --- TAB 1: Dashboard Analitica ---
+# --- TAB 1: Dashboard ---
 with tab_dash:
-    st.subheader("📊 Panoramica Parco Auto e Incassi")
-    
+    st.subheader("📊 Panoramica Generale")
     if not df.empty:
         df_valid = df.copy()
         df_valid["Costo Totale (€)"] = pd.to_numeric(df_valid["Costo Totale (€)"], errors='coerce').fillna(0)
-        df_valid["Prezzo Giornaliero"] = pd.to_numeric(df_valid["Prezzo Giornaliero"], errors='coerce').fillna(0)
         
-        totale_veicoli = len(df_valid)
-        noleggiate = len(df_valid[df_valid["Stato"] == "Noleggiata"]) if "Stato" in df_valid.columns else 0
-        disponibili = len(df_valid[df_valid["Stato"] == "Disponibile"]) if "Stato" in df_valid.columns else 0
-        in_manutenzione = len(df_valid[df_valid["Stato"] == "In Manutenzione"]) if "Stato" in df_valid.columns else 0
-        incasso_totale = df_valid["Costo Totale (€)"].sum()
-
-        # Indicatori principali (KPI)
-        col1, col2, col3, col4, col5 = st.columns(5)
-        col1.metric("Totale Veicoli", totale_veicoli)
-        col2.metric("In Noleggio", noleggiate)
-        col3.metric("Disponibili", disponibili)
-        col4.metric("In Manutenzione", in_manutenzione)
-        col5.metric("Incasso Totale", f"€ {incasso_totale:,.2f}")
-
+        c1, c2, c3, c4 = st.columns(4)
+        c1.metric("Totale Veicoli", len(df_valid))
+        c2.metric("In Noleggio", len(df_valid[df_valid["Stato"] == "Noleggiata"]) if "Stato" in df_valid.columns else 0)
+        c3.metric("Disponibili", len(df_valid[df_valid["Stato"] == "Disponibile"]) if "Stato" in df_valid.columns else 0)
+        c4.metric("Incasso Totale", f"€ {df_valid['Costo Totale (€)'].sum():,.2f}")
+        
         st.divider()
-
-        # Grafici
-        g_col1, g_col2 = st.columns(2)
-        
-        with g_col1:
-            st.write("**Distribuzione Veicoli per Categoria**")
-            if "Categoria" in df_valid.columns and not df_valid["Categoria"].dropna().empty:
-                cat_counts = df_valid["Categoria"].value_counts()
-                st.bar_chart(cat_counts)
-            else:
-                st.info("Nessuna categoria registrata.")
-
-        with g_col2:
-            st.write("**Distribuzione per Stato Veicolo**")
-            if "Stato" in df_valid.columns and not df_valid["Stato"].dropna().empty:
-                stato_counts = df_valid["Stato"].value_counts()
-                st.bar_chart(stato_counts)
-            else:
-                st.info("Nessun stato registrato.")
+        if "Categoria" in df_valid.columns:
+            st.write("**Veicoli per Categoria**")
+            st.bar_chart(df_valid["Categoria"].value_counts())
     else:
-        st.info("Nessun dato disponibile per generare la dashboard.")
+        st.info("Nessun dato disponibile.")
 
-# --- TAB 2: Registro e Filtri ---
+# --- TAB 2: Registro ---
 with tab_registro:
-    st.subheader("📋 Registro Completo Veicoli e Noleggi")
-    
+    st.subheader("📋 Registro Completo")
     if not df.empty:
-        col_f1, col_f2 = st.columns(2)
-        with col_f1:
-            search_query = st.text_input("🔍 Cerca per Targa Auto, Marca, Modello o Cliente", "")
-        with col_f2:
-            stati = ["Tutti"] + [s for s in df["Stato"].dropna().unique()] if "Stato" in df.columns else ["Tutti"]
-            filtro_stato = st.selectbox("Filtra per Stato Veicolo", stati)
-
-        df_filtrato = df.copy()
+        search_query = st.text_input("🔍 Cerca (Targa, Marca, Cliente...)", "")
         if search_query:
-            df_filtrato = df_filtrato[
-                df_filtrato.astype(str).apply(lambda row: row.str.contains(search_query, case=False).any(), axis=1)
-            ]
-        if filtro_stato != "Tutti" and "Stato" in df_filtrato.columns:
-            df_filtrato = df_filtrato[df_filtrato["Stato"] == filtro_stato]
-
-        st.dataframe(df_filtrato, use_container_width=True, hide_index=True)
-        st.caption(f"Totale elementi: {len(df_filtrato)}")
+            df_filtrato = df[df.astype(str).apply(lambda r: r.str.contains(search_query, case=False).any(), axis=1)]
+            st.dataframe(df_filtrato, use_container_width=True, hide_index=True)
+        else:
+            st.dataframe(df, use_container_width=True, hide_index=True)
     else:
-        st.warning("Nessun dato presente nel Foglio Google.")
+        st.warning("Nessun dato trovato.")
 
-# --- TAB 3: Inserimento Veicolo/Noleggio & Calcolo Costi ---
+# --- TAB 3: Nuovo Inserimento e Scrittura tramite Apps Script ---
 with tab_nuovo:
-    st.subheader("➕ Registra Nuovo Veicolo o Noleggio")
+    st.subheader("➕ Inserisci Registrazione")
     
-    with st.form("form_noleggio", clear_on_submit=False):
-        c1, c2 = st.columns(2)
+    with st.form("form_noleggio", clear_on_submit=True):
+        col1, col2 = st.columns(2)
         
-        with c1:
-            targa = st.text_input("Targa Auto *", placeholder="AA123BB").upper()
-            marca = st.text_input("Marca *", placeholder="es. Fiat")
-            modello = st.text_input("Modello *", placeholder="es. Panda")
-            categoria = st.selectbox("Categoria", ["Utilitaria", "Berlina", "SUV", "Station Wagon", "Furgone", "Altro"])
-            anno_imm = st.number_input("Anno immatricolazione", min_value=1990, max_value=2030, value=2023, step=1)
+        with col1:
+            targa = st.text_input("Targa Auto *").upper()
+            marca = st.text_input("Marca *")
+            modello = st.text_input("Modello *")
+            categoria = st.selectbox("Categoria", ["Utilitaria", "Berlina", "SUV", "Station Wagon", "Furgone"])
+            anno_imm = st.number_input("Anno immatricolazione", min_value=1990, max_value=2030, value=2023)
 
-        with c2:
-            prezzo_giornaliero = st.number_input("Prezzo Giornaliero (€) *", min_value=0.0, value=50.0, step=5.0)
-            cliente = st.text_input("Cliente", placeholder="Mario Rossi (opzionale)")
+        with col2:
+            prezzo_giornaliero = st.number_input("Prezzo Giornaliero (€) *", min_value=0.0, value=50.0)
+            cliente = st.text_input("Cliente")
             stato = st.selectbox("Stato Veicolo", ["Disponibile", "Noleggiata", "In Manutenzione"])
             
             data_inizio = st.date_input("Data Inizio Noleggio", date.today())
             data_fine = st.date_input("Data Fine Noleggio", date.today())
-            note = st.text_area("Note", placeholder="Note opzionali...")
+            note = st.text_area("Note")
 
-        # Calcolo dei giorni e del costo totale
-        giorni_noleggio = (data_fine - data_inizio).days
-        if giorni_noleggio < 1:
-            giorni_noleggio = 1  # Minimo 1 giorno
-            
-        costo_totale = giorni_noleggio * prezzo_giornaliero if stato == "Noleggiata" else 0.0
+        # Calcolo preventivo
+        giorni = (data_fine - data_inizio).days
+        giorni = 1 if giorni < 1 else giorni
+        costo_totale = giorni * prezzo_giornaliero if stato == "Noleggiata" else 0.0
 
         if stato == "Noleggiata":
-            st.info(f"📐 **Riepilogo Costo:** {giorni_noleggio} giorno/i × €{prezzo_giornaliero:.2f}/giorno = **Costo Totale: €{costo_totale:.2f}**")
+            st.info(f"📐 **Costo Calcolato:** {giorni} giorni × €{prezzo_giornaliero:.2f} = **€{costo_totale:.2f}**")
 
         submit = st.form_submit_button("💾 Salva su Google Sheets")
 
         if submit:
             if not targa or not marca or not modello:
-                st.error("I campi Targa Auto, Marca e Modello sono obbligatori.")
-            elif data_fine < data_inizio and stato == "Noleggiata":
-                st.error("La data di fine noleggio non può essere precedente alla data di inizio.")
+                st.error("Compila i campi obbligatori: Targa, Marca e Modello.")
             else:
-                # Mappatura dei dati corrispondente alle colonne del foglio
-                nuovo_record = pd.DataFrame([{
+                # Payload JSON inviato a Google Apps Script
+                payload = {
                     "Targa Auto": targa,
                     "Marca": marca,
                     "Modello": modello,
@@ -174,17 +125,19 @@ with tab_nuovo:
                     "Stato": stato,
                     "Data Inizio": str(data_inizio) if stato == "Noleggiata" else "",
                     "Data Fine": str(data_fine) if stato == "Noleggiata" else "",
-                    "Giorni": giorni_noleggio if stato == "Noleggiata" else 0,
+                    "Giorni": giorni if stato == "Noleggiata" else 0,
                     "Costo Totale (€)": costo_totale,
                     "Note": note
-                }])
-
-                # Unione e aggiornamento
-                df_aggiornato = pd.concat([df, nuovo_record], ignore_index=True)
+                }
                 
+                # Invio HTTP POST
                 try:
-                    conn.update(data=df_aggiornato)
-                    st.success(f"Veicolo {targa} salvato con successo!")
-                    st.rerun()
+                    response = requests.post(APPS_SCRIPT_URL, json=payload)
+                    if response.status_code == 200:
+                        st.success(f"Veicolo {targa} salvato correttamente!")
+                        st.cache_data.clear()
+                        st.rerun()
+                    else:
+                        st.error(f"Errore nella risposta dello script: {response.status_code}")
                 except Exception as e:
-                    st.error(f"Errore durante il salvataggio: {e}")
+                    st.error(f"Errore di connessione: {e}")
