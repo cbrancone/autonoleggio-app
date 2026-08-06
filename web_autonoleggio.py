@@ -11,7 +11,7 @@ APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwyQyyVasHzYp0OPPdXj0
 
 # 2. URL del tuo foglio Google per l'esportazione in CSV (sostituisci l'ID del foglio)
 # Nota: Il foglio deve essere impostato su "Chiunque abbia il link può visualizzare"
-SPREADSHEET_ID = "https://docs.google.com/spreadsheets/d/1-piIVsHAWbxwTHYf7imtnvx_MUoit-af4YahnncVF7Y/edit?usp=sharing"
+SPREADSHEET_ID = "https://docs.google.com/spreadsheets/d/1-piIVsHAWbxwTHYf7imtnvx_MUoit-af4YahnncVF7Y/edit?gid=0#gid=0"
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv"
 
 # ---------------------------------------------------------
