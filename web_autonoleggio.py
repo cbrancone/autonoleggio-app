@@ -7,11 +7,11 @@ from datetime import date
 # CONFIGURAZIONE URL (Sostituisci con i tuoi link)
 # ---------------------------------------------------------
 # 1. URL fornito da Google Apps Script durante la distribuzione
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/INSERISCI_QUI_IL_TUO_ID_SCRIPT/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwyQyyVasHzYp0OPPdXj0PqHntIMyCPGDgs5fVL2DvcprhvW7jadA7aTXo7f_n2_OBBHQ/exec"
 
 # 2. URL del tuo foglio Google per l'esportazione in CSV (sostituisci l'ID del foglio)
 # Nota: Il foglio deve essere impostato su "Chiunque abbia il link può visualizzare"
-SPREADSHEET_ID = "INSERISCI_QUI_L_ID_DEL_TUO_FOGLIO"
+SPREADSHEET_ID = "https://docs.google.com/spreadsheets/d/1-piIVsHAWbxwTHYf7imtnvx_MUoit-af4YahnncVF7Y/edit?usp=sharing"
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv"
 
 # ---------------------------------------------------------
