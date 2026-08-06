@@ -11,9 +11,8 @@ APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbwyQyyVasHzYp0OPPdXj0
 
 # 2. URL del tuo foglio Google per l'esportazione in CSV (sostituisci l'ID del foglio)
 # Nota: Il foglio deve essere impostato su "Chiunque abbia il link può visualizzare"
-SPREADSHEET_ID = "https://docs.google.com/spreadsheets/d/1hktUuKCvomCuvhbklmXs-A93usdhdouC/edit?usp=drive_link&ouid=114374870114697389870&rtpof=true&sd=true"
-CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/export?format=csv"
-
+SPREADSHEET_ID = "1hktUuKCvomCuvhbklmXs-A93usdhdouC/edit?usp=drive_link&ouid=114374870114697389870&rtpof=true&sd=true"
+CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv"
 # ---------------------------------------------------------
 # 1. Setup Pagina
 # ---------------------------------------------------------
