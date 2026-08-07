@@ -13,7 +13,7 @@ SPREADSHEET_ID = "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE"
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv"
 
 # 3. URL dell'Applicazione Web ottenuta dalla distribuzione di Google Apps Script (deve terminare con /exec)
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/TUO_SCRIPT_ID/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJB0DUaTg18brOx0d_DXMzgYu1WqgPK7bfx3zFGmABkC-3zrC7MZenHr2NHmHTqBdo_A/exec"
 
 # ---------------------------------------------------------
 # 1. Setup Pagina
