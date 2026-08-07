@@ -45,28 +45,24 @@ tab_dash, tab_registro, tab_nuovo = st.tabs([
 # --- TAB 1: Dashboard ---
 with tab_dash:
     st.subheader("📊 Panoramica Generale")
-    if not df.empty:
-        # 1. Rimuovi spazi nascosti prima e dopo i nomi di tutte le colonne
-df_valid.columns = df_valid.columns.str.strip()
+# Riga 48: Esempio di blocco 'if'
+if not df_valid.empty:
+    # --- TUTTO IL CODICE QUI SOTTO DEVE ESSERE RIENTRATO DI 4 SPAZI ---
+    df_valid.columns = df_valid.columns.str.strip()
+    col_costo = "Costo Totale (€)"
 
-col_costo = "Costo Totale (€)"
-
-if col_costo in df_valid.columns:
-    # 2. Converti in testo, rimuovi '€' e spazi, e sostituisce le virgole coi punti per i decimali
-    valori_puliti = (
-        df_valid[col_costo]
-        .astype(str)
-        .str.replace('€', '', regex=False)
-        .str.replace(' ', '', regex=False)
-        .str.replace(',', '.', regex=False)
-    )
-    
-    # 3. Converti in numero e imposta a 0 i valori non validi o vuoti
-    df_valid[col_costo] = pd.to_numeric(valori_puliti, errors='coerce').fillna(0)
-else:
-    # Mostra l'errore su Streamlit elencando i nomi reali delle colonne presenti
-    st.error(f"Colonna '{col_costo}' non trovata nel foglio!")
-    st.write("Verifica se la colonna ha un nome diverso tra queste:", list(df_valid.columns))
+    if col_costo in df_valid.columns:
+        valori_puliti = (
+            df_valid[col_costo]
+            .astype(str)
+            .str.replace('€', '', regex=False)
+            .str.replace(' ', '', regex=False)
+            .str.replace(',', '.', regex=False)
+        )
+        df_valid[col_costo] = pd.to_numeric(valori_puliti, errors='coerce').fillna(0)
+    else:
+        st.error(f"Colonna '{col_costo}' non trovata nel foglio!")
+        st.write("Colonne trovate:", list(df_valid.columns))
         
         st.divider()
         if "Categoria" in df_valid.columns:
