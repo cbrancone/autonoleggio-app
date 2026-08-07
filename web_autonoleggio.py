@@ -119,6 +119,7 @@ with tab_registro:
 
         else:
             # --- VISTA MODIFICA ATTIVA ---
+         # VISTA MODIFICA ATTIVA
             col_btn1, col_btn2, _ = st.columns([2, 2, 4])
             with col_btn1:
                 tasto_salva = st.button("💾 Salva Modifiche su Google Sheets", type="primary")
@@ -127,20 +128,32 @@ with tab_registro:
                     st.session_state.modalita_modifica = False
                     st.rerun()
 
-            st.caption("✏️ **Modalità Modifica Attiva**: Modifica le celle o aggiungi/rimuovi righe, quindi clicca su *Salva Modifiche*.")
+            st.caption("💡 Spunta la casella 'Elimina' sulle righe che vuoi rimuovere, oppure modifica i dati e clicca su Salva.")
 
-            # Tabella interattiva ed editabile
+            # Aggiunge una colonna temporanea per la spunta di eliminazione
+            df_editabile = df_filtrato.copy()
+            if "Elimina" not in df_editabile.columns:
+                df_editabile.insert(0, "Elimina", False)
+
             edited_df = st.data_editor(
-                df_filtrato, 
+                df_editabile, 
                 use_container_width=True, 
-                hide_index=True, 
-                num_rows="dynamic"
+                hide_index=True,
+                column_config={
+                    "Elimina": st.column_config.CheckboxColumn(
+                        "🗑️ Elimina?",
+                        help="Spunta questa casella per rimuovere il veicolo",
+                        default=False,
+                    )
+                }
             )
 
-            # Azione al click su "Salva Modifiche"
             if tasto_salva:
                 try:
-                    df_pulito = edited_df.fillna("")
+                    # Rimuove le righe dove la colonna 'Elimina' è True
+                    df_final = edited_df[edited_df["Elimina"] == False].drop(columns=["Elimina"])
+                    df_pulito = df_final.fillna("")
+                    
                     payload = {
                         "action": "update_all",
                         "rows": df_pulito.to_dict(orient="records")
@@ -148,7 +161,7 @@ with tab_registro:
                     
                     response = requests.post(APPS_SCRIPT_URL, json=payload)
                     if response.status_code == 200:
-                        st.success("✅ Foglio Google aggiornato con successo!")
+                        st.success("✅ Salvataggio completato ed elementi selezionati eliminati!")
                         st.session_state.modalita_modifica = False
                         st.cache_data.clear()
                         time.sleep(1)
