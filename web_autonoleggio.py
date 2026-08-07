@@ -67,8 +67,9 @@ df = carica_dati()
 # ---------------------------------------------------------
 # 3. Layout a Schede (Tab)
 # ---------------------------------------------------------
-tab_dash, tab_storico, tab_registro, tab_nuovo = st.tabs([
+tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo = st.tabs([
     "📊 Dashboard & Analytics",
+    "🔑 Rientro Veicolo",
     "📜 Storico & Ricerca",
     "📋 Registro Parco Auto",
     "➕ Inserisci Veicolo / Noleggio",
@@ -157,7 +158,7 @@ with tab_dash:
 
         col_g3, col_g4 = st.columns(2)
         with col_g3:
-            st.write("🚘 **Top 5 Veicoli per Incasso Generated**")
+            st.write("🚘 **Top 5 Veicoli per Incasso Generato**")
             if (
                 "Targa Auto" in df.columns
                 and "Costo Totale (€)" in df.columns
@@ -184,13 +185,180 @@ with tab_dash:
         st.info("Nessun dato disponibile nel Foglio Google.")
 
 # =========================================================
-# TAB 2: STORICO & RICERCA FILTRATA
+# TAB 2: RIENTRO VEICOLO (CHECK-IN)
+# =========================================================
+with tab_rientro:
+    st.subheader("🔑 Check-in e Rientro Veicolo")
+
+    if not df.empty and "Stato" in df.columns:
+        # Filtra solo le auto in stato 'Noleggiata'
+        df_noleggiate = df[df["Stato"] == "Noleggiata"]
+
+        if df_noleggiate.empty:
+            st.success(
+                "🎉 Nessun veicolo attualmente in noleggio! Tutto il parco auto è"
+                " disponibile o in manutenzione."
+            )
+        else:
+            # Lista per la selectbox
+            auto_opzioni = df_noleggiate.apply(
+                lambda r: (
+                    f"{r.get('Targa Auto', '')} - {r.get('Marca', '')}"
+                    f" {r.get('Modello', '')} (Cliente:"
+                    f" {r.get('Cliente', 'N/D')})"
+                ),
+                axis=1,
+            ).tolist()
+
+            auto_scelta = st.selectbox(
+                "Seleziona il veicolo da far rientrare:", auto_opzioni
+            )
+
+            if auto_scelta:
+                targa_selezionata = auto_scelta.split(" - ")[0]
+                veicolo = df_noleggiate[
+                    df_noleggiate["Targa Auto"] == targa_selezionata
+                ].iloc[0]
+
+                st.divider()
+
+                # Card Informativa Noleggio
+                st.markdown("### 📄 Dettagli Noleggio Attivo")
+                c1, c2, c3 = st.columns(3)
+
+                c1.markdown(f"**Targa:** `{veicolo.get('Targa Auto', '')}`")
+                c1.markdown(
+                    "**Veicolo:**"
+                    f" {veicolo.get('Marca', '')} {veicolo.get('Modello', '')}"
+                )
+
+                d_ini = (
+                    veicolo["Data Inizio"].strftime("%Y-%m-%d")
+                    if pd.notna(veicolo.get("Data Inizio"))
+                    else "N/D"
+                )
+                d_fin = (
+                    veicolo["Data Fine"].strftime("%Y-%m-%d")
+                    if pd.notna(veicolo.get("Data Fine"))
+                    else "N/D"
+                )
+
+                c2.markdown(f"**Cliente:** {veicolo.get('Cliente', 'N/D')}")
+                c2.markdown(f"**Data Inizio Prevista:** {d_ini}")
+
+                c3.markdown(
+                    "**Costo Totale:** €"
+                    f" {veicolo.get('Costo Totale (€)', 0):.2f}"
+                )
+                c3.markdown(f"**Data Fine Prevista:** {d_fin}")
+
+                st.divider()
+
+                # Form per il Rientro
+                with st.form("form_rientro"):
+                    st.markdown("### 📝 Registra Rientro")
+
+                    r_col1, r_col2 = st.columns(2)
+                    with r_col1:
+                        nuovo_stato = st.selectbox(
+                            "Nuovo Stato del Veicolo *",
+                            ["Disponibile", "In Manutenzione"],
+                            help=(
+                                "Seleziona 'In Manutenzione' se il veicolo"
+                                " necessita di pulizia straordinaria o"
+                                " riparazioni."
+                            ),
+                        )
+                        data_rientro = st.date_input(
+                            "Data Rientro Effettiva", date.today()
+                        )
+
+                    with r_col2:
+                        note_rientro = st.text_area(
+                            "Note Check-in (Carburante, Danni, Pulizia)",
+                            help=(
+                                "Le note verranno salvate ed allegate al"
+                                " registro dello storico."
+                            ),
+                        )
+
+                    btn_rientro = st.form_submit_button(
+                        "✅ Conferma Rientro Veicolo", type="primary"
+                    )
+
+                    if btn_rientro:
+                        try:
+                            df_aggiornato = df.copy()
+
+                            # Formattazione stringa date per l'export JSON
+                            for c in ["Data Inizio", "Data Fine"]:
+                                if c in df_aggiornato.columns:
+                                    df_aggiornato[c] = (
+                                        df_aggiornato[c]
+                                        .dt.strftime("%Y-%m-%d")
+                                        .fillna("")
+                                    )
+
+                            idx = df_aggiornato[
+                                df_aggiornato["Targa Auto"] == targa_selezionata
+                            ].index
+
+                            if len(idx) > 0:
+                                i = idx[0]
+                                df_aggiornato.loc[i, "Stato"] = nuovo_stato
+
+                                # Append delle note di rientro
+                                note_esistenti = (
+                                    str(df_aggiornato.loc[i, "Note"])
+                                    if "Note" in df_aggiornato.columns
+                                    and pd.notna(df_aggiornato.loc[i, "Note"])
+                                    else ""
+                                )
+                                tag_rientro = (
+                                    f"[Rientro {data_rientro}: {note_rientro}]"
+                                    if note_rientro
+                                    else f"[Rientro {data_rientro}]"
+                                )
+                                df_aggiornato.loc[i, "Note"] = (
+                                    f"{note_esistenti} {tag_rientro}".strip()
+                                )
+
+                                payload = {
+                                    "action": "update_all",
+                                    "rows": df_aggiornato.fillna("").to_dict(
+                                        orient="records"
+                                    ),
+                                }
+
+                                response = requests.post(
+                                    APPS_SCRIPT_URL, json=payload
+                                )
+                                if response.status_code == 200:
+                                    st.success(
+                                        f"🔑 Veicolo {targa_selezionata}"
+                                        " rientrato con successo! Stato"
+                                        f" aggiornato a '{nuovo_stato}'."
+                                    )
+                                    st.cache_data.clear()
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(
+                                        "Errore durante il salvataggio:"
+                                        f" {response.status_code}"
+                                    )
+                        except Exception as e:
+                            st.error(f"Errore durante l'operazione: {e}")
+    else:
+        st.info("Nessun dato disponibile.")
+
+# =========================================================
+# TAB 3: STORICO & RICERCA FILTRATA
 # =========================================================
 with tab_storico:
     st.subheader("📜 Storico Noleggi e Filtri Avanzati")
 
     if not df.empty:
-        # Controlli di Filtro
         f1, f2, f3 = st.columns(3)
 
         with f1:
@@ -211,7 +379,6 @@ with tab_storico:
                 help="Seleziona la data di inizio e di fine per filtrare lo storico",
             )
 
-        # Applicazione Filtri
         df_filtrato = df.copy()
 
         if testo_ricerca:
@@ -237,7 +404,6 @@ with tab_storico:
                 & (df_filtrato["Data Inizio"] <= d_fine)
             ]
 
-        # Indicatori del Filtro
         st.markdown(f"**Risultati trovati:** {len(df_filtrato)}")
         c_incasso = (
             df_filtrato["Costo Totale (€)"].sum()
@@ -254,7 +420,6 @@ with tab_storico:
         rf1.info(f"💰 **Incasso Totale Filtrato:** € {c_incasso:,.2f}")
         rf2.info(f"📅 **Giorni Noleggio Totali Filtrati:** {int(c_giorni)} giorni")
 
-        # Formattazione per la visualizzazione delle date
         df_display = df_filtrato.copy()
         for c in ["Data Inizio", "Data Fine"]:
             if c in df_display.columns:
@@ -262,7 +427,6 @@ with tab_storico:
 
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
-        # Download CSV
         csv_data = df_display.to_csv(index=False).encode("utf-8")
         st.download_button(
             label="📥 Scarica Storico Filtrato (CSV)",
@@ -274,7 +438,7 @@ with tab_storico:
         st.warning("Nessun dato disponibile.")
 
 # =========================================================
-# TAB 3: REGISTRO PARCO AUTO (EDITABILE)
+# TAB 4: REGISTRO PARCO AUTO (EDITABILE)
 # =========================================================
 with tab_registro:
     st.subheader("📋 Registro Completo (Modifica e Salvataggio)")
@@ -397,7 +561,7 @@ with tab_registro:
         st.warning("Nessun dato trovato.")
 
 # =========================================================
-# TAB 4: NUOVO INSERIMENTO
+# TAB 5: NUOVO INSERIMENTO
 # =========================================================
 with tab_nuovo:
     st.subheader("➕ Inserisci Registrazione")
