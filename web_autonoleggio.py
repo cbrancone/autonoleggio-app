@@ -342,50 +342,32 @@ with tab_rientro:
                         df_aggiornato = formatta_date_df(df)
 
                         # FIX BUG INDICE: Cerca la riga specificamente Noleggiata per quella targa
-                        idx = df_aggiornato[
-                            (df_aggiornato["Targa Auto"] == targa_selezionata)
-                            & (df_aggiornato["Stato"] == "Noleggiata")
-                        ].index
+                     # 1. Trova la riga specifica dell'auto attualmente "Noleggiata"
+idx = df_aggiornato[
+    (df_aggiornato["Targa Auto"] == targa_selezionata)
+    & (df_aggiornato["Stato"] == "Noleggiata")
+].index
 
-                        if len(idx) > 0:
-                            i = idx[0]
+if len(idx) > 0:
+    i = idx[0]
 
-                            df_aggiornato.loc[i, "Stato"] = nuovo_stato
-                            df_aggiornato.loc[i, "Data Fine"] = str(
-                                data_rientro_effettiva
-                            )
-                            df_aggiornato.loc[i, "Giorni"] = int(
-                                giorni_effettivi
-                            )
-                            df_aggiornato.loc[i, "Costo Totale (€)"] = float(
-                                costo_ricalcolato
-                            )
+    # 2. Aggiorna lo stato, la data di fine e ricalcola giorni/costo
+    df_aggiornato.loc[i, "Stato"] = nuovo_stato  # es. 'Disponibile'
+    df_aggiornato.loc[i, "Data Fine"] = str(data_rientro_effettiva)
+    df_aggiornato.loc[i, "Giorni"] = int(giorni_effettivi)
+    df_aggiornato.loc[i, "Costo Totale (€)"] = float(costo_ricalcolato)
 
-                            note_esistenti = (
-                                str(df_aggiornato.loc[i, "Note"])
-                                if "Note" in df_aggiornato.columns
-                                and pd.notna(df_aggiornato.loc[i, "Note"])
-                                else ""
-                            )
-                            tag = (
-                                f"[Rientro {data_rientro_effettiva}:"
-                                f" {note_rientro}]"
-                                if note_rientro
-                                else f"[Rientro {data_rientro_effettiva}]"
-                            )
-                            df_aggiornato.loc[i, "Note"] = (
-                                f"{note_esistenti} {tag}".strip()
-                            )
+    # 3. Aggiunge la nota di rientro mantenendo le note precedenti
+    note_esistenti = str(df_aggiornato.loc[i, "Note"]) if pd.notna(df_aggiornato.loc[i, "Note"]) else ""
+    tag = f"[Rientro {data_rientro_effettiva}: {note_rientro}]" if note_rientro else f"[Rientro {data_rientro_effettiva}]"
+    df_aggiornato.loc[i, "Note"] = f"{note_esistenti} {tag}".strip()
 
-                            payload = {
-                                "action": "update_all",
-                                "rows": df_aggiornato.fillna("").to_dict(
-                                    orient="records"
-                                ),
-                            }
-
-                            response = requests.post(
-                                APPS_SCRIPT_URL, json=payload
+    # 4. Invia i dati aggiornati a Google Sheets via Webhook POST
+    payload = {
+        "action": "update_all",
+        "rows": df_aggiornato.fillna("").to_dict(orient="records"),
+    }
+    response = requests.post(APPS_SCRIPT_URL, json=payload)
                             )
                             if response.status_code == 200:
                                 st.success(
