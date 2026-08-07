@@ -4,15 +4,17 @@ import requests
 from datetime import date
 
 # ---------------------------------------------------------
-# CONFIGURAZIONE URL (Sostituisci con i tuoi link)
+# CONFIGURAZIONE URL
 # ---------------------------------------------------------
-# 1. URL fornito da Google Apps Script durante la distribuzione
-APPS_SCRIPT_URL = "https://docs.google.com/spreadsheets/d/1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE/edit?usp=sharing"
+# 1. ID univoco del tuo Foglio Google (estratto dall'URL)
+SPREADSHEET_ID = "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE"
 
-# 2. URL del tuo foglio Google per l'esportazione in CSV (sostituisci l'ID del foglio)
-# Nota: Il foglio deve essere impostato su "Chiunque abbia il link può visualizzare"
-SPREADSHEET_ID = "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE/edit?usp=sharing"
+# 2. URL per l'esportazione automatica in CSV
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv"
+
+# 3. URL dell'Applicazione Web ottenuta dalla distribuzione di Google Apps Script (deve terminare con /exec)
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/TUO_SCRIPT_ID/exec"
+
 # ---------------------------------------------------------
 # 1. Setup Pagina
 # ---------------------------------------------------------
@@ -22,7 +24,7 @@ st.title("🚗 Sistema Gestione Autonoleggio")
 # ---------------------------------------------------------
 # 2. Lettura Dati via CSV
 # ---------------------------------------------------------
-@st.cache_data(ttl=2) # Pulisce la cache ogni 2 secondi per dati sempre freschi
+@st.cache_data(ttl=2)  # Pulisce la cache ogni 2 secondi
 def carica_dati():
     try:
         data = pd.read_csv(CSV_URL)
@@ -45,30 +47,49 @@ tab_dash, tab_registro, tab_nuovo = st.tabs([
 # --- TAB 1: Dashboard ---
 with tab_dash:
     st.subheader("📊 Panoramica Generale")
-# Riga 48: Esempio di blocco 'if'
-if not df_valid.empty:
-    # --- TUTTO IL CODICE QUI SOTTO DEVE ESSERE RIENTRATO DI 4 SPAZI ---
-    df_valid.columns = df_valid.columns.str.strip()
-    col_costo = "Costo Totale (€)"
-
-    if col_costo in df_valid.columns:
-        valori_puliti = (
-        df_valid[col_costo]
-            .astype(str)
-            .str.replace('€', '', regex=False)
-            .str.replace(' ', '', regex=False)
-            .str.replace(',', '.', regex=False)
-        )
-        df_valid[col_costo] = pd.to_numeric(valori_puliti, errors='coerce').fillna(0)
-else:
-        st.error(f"Colonna '{col_costo}' non trovata nel foglio!")
-        st.write("Colonne trovate:", list(df_valid.columns))
+    
+    if not df.empty:
+        df_valid = df.copy()
+        # Pulizia spazi vuoti nei nomi delle colonne
+        df_valid.columns = df_valid.columns.str.strip()
+        
+        col_costo = "Costo Totale (€)"
+        if col_costo in df_valid.columns:
+            valori_puliti = (
+                df_valid[col_costo]
+                .astype(str)
+                .str.replace('€', '', regex=False)
+                .str.replace(' ', '', regex=False)
+                .str.replace(',', '.', regex=False)
+            )
+            df_valid[col_costo] = pd.to_numeric(valori_puliti, errors='coerce').fillna(0)
+        
+        # Indicatori sintetici (KPI)
+        m1, m2, m3 = st.columns(3)
+        m1.metric("Totale Veicoli", len(df_valid))
+        
+        if "Stato" in df_valid.columns:
+            noleggiati = len(df_valid[df_valid["Stato"] == "Noleggiata"])
+            m2.metric("Veicoli Noleggiati", noleggiati)
+        
+        if col_costo in df_valid.columns:
+            incasso_totale = df_valid[col_costo].sum()
+            m3.metric("Incasso Totale", f"€ {incasso_totale:,.2f}")
         
         st.divider()
-    if "Categoria" in df_valid.columns:
-        st.write("**Veicoli per Categoria**")
-        st.bar_chart(df_valid["Categoria"].value_counts())
-        st.info("Nessun dato disponibile.")
+        
+        # Grafici analitici
+        g1, g2 = st.columns(2)
+        with g1:
+            if "Categoria" in df_valid.columns:
+                st.write("**Veicoli per Categoria**")
+                st.bar_chart(df_valid["Categoria"].value_counts())
+        with g2:
+            if "Stato" in df_valid.columns:
+                st.write("**Stato del Parco Auto**")
+                st.bar_chart(df_valid["Stato"].value_counts())
+    else:
+        st.info("Nessun dato disponibile nel Foglio Google.")
 
 # --- TAB 2: Registro ---
 with tab_registro:
