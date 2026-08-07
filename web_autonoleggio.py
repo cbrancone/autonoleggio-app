@@ -1,18 +1,13 @@
 import streamlit as st
 import pandas as pd
 import requests
+import time
 from datetime import date
 
 # ---------------------------------------------------------
 # CONFIGURAZIONE URL
 # ---------------------------------------------------------
-# 1. ID univoco del tuo Foglio Google (estratto dall'URL)
 SPREADSHEET_ID = "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE"
-
-# 2. URL per l'esportazione automatica in CSV
-CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv"
-
-# 3. URL dell'Applicazione Web ottenuta dalla distribuzione di Google Apps Script (deve terminare con /exec)
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJB0DUaTg18brOx0d_DXMzgYu1WqgPK7bfx3zFGmABkC-3zrC7MZenHr2NHmHTqBdo_A/exec"
 
 # ---------------------------------------------------------
@@ -22,15 +17,16 @@ st.set_page_config(page_title="Gestione Autonoleggio", page_icon="🚗", layout=
 st.title("🚗 Sistema Gestione Autonoleggio")
 
 # ---------------------------------------------------------
-# 2. Lettura Dati via CSV
+# 2. Lettura Dati via CSV (con Anti-Cache)
 # ---------------------------------------------------------
-@st.cache_data(ttl=2)  # Pulisce la cache ogni 2 secondi
+@st.cache_data(ttl=1)
 def carica_dati():
     try:
-        data = pd.read_csv(CSV_URL)
+        timestamp_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&nocache={int(time.time())}"
+        data = pd.read_csv(timestamp_url)
         return data
     except Exception as e:
-        st.error(f"Impossibile leggere il Foglio Google. Verifica che il link sia pubblico: {e}")
+        st.error(f"Impossibile leggere il Foglio Google: {e}")
         return pd.DataFrame()
 
 df = carica_dati()
@@ -40,7 +36,7 @@ df = carica_dati()
 # ---------------------------------------------------------
 tab_dash, tab_registro, tab_nuovo = st.tabs([
     "📊 Dashboard & Analytics",
-    "📋 Registro Parco Auto", 
+    "📋 Registro Parco Auto (Modificabile)", 
     "➕ Inserisci Veicolo / Noleggio"
 ])
 
@@ -50,7 +46,6 @@ with tab_dash:
     
     if not df.empty:
         df_valid = df.copy()
-        # Pulizia spazi vuoti nei nomi delle colonne
         df_valid.columns = df_valid.columns.str.strip()
         
         col_costo = "Costo Totale (€)"
@@ -64,7 +59,6 @@ with tab_dash:
             )
             df_valid[col_costo] = pd.to_numeric(valori_puliti, errors='coerce').fillna(0)
         
-        # Indicatori sintetici (KPI)
         m1, m2, m3 = st.columns(3)
         m1.metric("Totale Veicoli", len(df_valid))
         
@@ -78,7 +72,6 @@ with tab_dash:
         
         st.divider()
         
-        # Grafici analitici
         g1, g2 = st.columns(2)
         with g1:
             if "Categoria" in df_valid.columns:
@@ -91,20 +84,48 @@ with tab_dash:
     else:
         st.info("Nessun dato disponibile nel Foglio Google.")
 
-# --- TAB 2: Registro ---
+# --- TAB 2: Registro con Modifica e Salvataggio ---
 with tab_registro:
-    st.subheader("📋 Registro Completo")
+    st.subheader("📋 Registro Completo (Modifica Diretta)")
+    st.caption("💡 Puoi modificare le celle direttamente nella tabella sottostante e cliccare su **Salva Modifiche** per aggiornare il Foglio Google.")
+    
     if not df.empty:
-        search_query = st.text_input("🔍 Cerca (Targa, Marca, Cliente...)", "")
+        search_query = st.text_input("🔍 Cerca nel registro", "")
+        
         if search_query:
             df_filtrato = df[df.astype(str).apply(lambda r: r.str.contains(search_query, case=False).any(), axis=1)]
-            st.dataframe(df_filtrato, use_container_width=True, hide_index=True)
         else:
-            st.dataframe(df, use_container_width=True, hide_index=True)
+            df_filtrato = df.copy()
+
+        # Tabella INTERATTIVA modificabile
+        edited_df = st.data_editor(
+            df_filtrato, 
+            use_container_width=True, 
+            hide_index=True, 
+            num_rows="dynamic"
+        )
+        
+        # Tasto per salvare le modifiche su Google Sheets
+        if st.button("💾 Salva Modifiche su Google Sheets", type="primary"):
+            try:
+                payload = {
+                    "action": "update_all",
+                    "rows": edited_df.to_dict(orient="records")
+                }
+                response = requests.post(APPS_SCRIPT_URL, json=payload)
+                if response.status_code == 200:
+                    st.success("✅ Foglio Google aggiornato con successo!")
+                    st.cache_data.clear()
+                    time.sleep(1)
+                    st.rerun()
+                else:
+                    st.error(f"Errore durante il salvataggio: {response.status_code}")
+            except Exception as e:
+                st.error(f"Errore di connessione: {e}")
     else:
         st.warning("Nessun dato trovato.")
 
-# --- TAB 3: Nuovo Inserimento e Scrittura tramite Apps Script ---
+# --- TAB 3: Nuovo Inserimento ---
 with tab_nuovo:
     st.subheader("➕ Inserisci Registrazione")
     
@@ -127,7 +148,6 @@ with tab_nuovo:
             data_fine = st.date_input("Data Fine Noleggio", date.today())
             note = st.text_area("Note")
 
-        # Calcolo preventivo
         giorni = (data_fine - data_inizio).days
         giorni = 1 if giorni < 1 else giorni
         costo_totale = giorni * prezzo_giornaliero if stato == "Noleggiata" else 0.0
@@ -135,14 +155,14 @@ with tab_nuovo:
         if stato == "Noleggiata":
             st.info(f"📐 **Costo Calcolato:** {giorni} giorni × €{prezzo_giornaliero:.2f} = **€{costo_totale:.2f}**")
 
-        submit = st.form_submit_button("💾 Salva su Google Sheets")
+        submit = st.form_submit_button("💾 Aggiungi Nuovo Veicolo")
 
         if submit:
             if not targa or not marca or not modello:
                 st.error("Compila i campi obbligatori: Targa, Marca e Modello.")
             else:
-                # Payload JSON inviato a Google Apps Script
                 payload = {
+                    "action": "append",
                     "Targa Auto": targa,
                     "Marca": marca,
                     "Modello": modello,
@@ -158,12 +178,12 @@ with tab_nuovo:
                     "Note": note
                 }
                 
-                # Invio HTTP POST
                 try:
                     response = requests.post(APPS_SCRIPT_URL, json=payload)
                     if response.status_code == 200:
                         st.success(f"Veicolo {targa} salvato correttamente!")
                         st.cache_data.clear()
+                        time.sleep(1)
                         st.rerun()
                     else:
                         st.error(f"Errore nella risposta dello script: {response.status_code}")
