@@ -1,692 +1,260 @@
-from datetime import date
+import uuid
 import time
+from datetime import date
 import pandas as pd
 import requests
 import streamlit as st
 
 # ---------------------------------------------------------
-# CONFIGURAZIONE URL (supporta st.secrets se configurati)
+# CONFIGURAZIONE (Usa st.secrets oppure inserisci qui i tuoi link)
 # ---------------------------------------------------------
-SPREADSHEET_ID = st.secrets.get(
-    "SPREADSHEET_ID", "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE"
-)
-APPS_SCRIPT_URL = st.secrets.get(
-    "APPS_SCRIPT_URL",
-    "https://script.google.com/macros/s/AKfycbzIMY05XhfUpztNADq1KlBC3vJxxdOGWisOdJDyrDXR2c6ZWiAiphJkL3aNvjAoBhS0-Q/exec",
-)
+SPREADSHEET_ID = st.secrets.get("SPREADSHEET_ID", "IL_TUO_SPREADSHEET_ID")
+APPS_SCRIPT_URL = st.secrets.get("APPS_SCRIPT_URL", "IL_TUO_APPS_SCRIPT_URL")
 
-# ---------------------------------------------------------
-# 1. Setup Pagina
-# ---------------------------------------------------------
-st.set_page_config(
-    page_title="Gestione Autonoleggio", page_icon="🚗", layout="wide"
-)
+st.set_page_config(page_title="Gestione Autonoleggio", page_icon="🚗", layout="wide")
 st.title("🚗 Sistema Gestione Autonoleggio")
 
-
-# Helper per la formattazione pulita delle date
-def formatta_date_df(dataframe, colonne_date=["Data Inizio", "Data Fine"]):
-    df_out = dataframe.copy()
+# ---------------------------------------------------------
+# HELPER E CARICAMENTO DATI
+# ---------------------------------------------------------
+def formatta_date(df):
+    df_out = df.copy()
+    colonne_date = ["Data Inizio", "Data Fine", "Data Inizio Noleggio"]
     for col in colonne_date:
         if col in df_out.columns:
-            df_out[col] = pd.to_datetime(df_out[col], errors="coerce")
-            df_out[col] = df_out[col].dt.strftime("%Y-%m-%d").fillna("")
+            df_out[col] = pd.to_datetime(df_out[col], errors="coerce").dt.strftime("%Y-%m-%d").fillna("")
     return df_out
 
-
-# ---------------------------------------------------------
-# 2. Lettura e Pre-processing Dati
-# ---------------------------------------------------------
-@st.cache_data(ttl=300)
-def carica_dati():
+@st.cache_data(ttl=60)
+def carica_dati_fogli():
     try:
-        timestamp_url = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&nocache={int(time.time())}"
-        data = pd.read_csv(timestamp_url)
-
-        # Pulizia nomi colonne
-        data.columns = data.columns.str.strip()
-
-        # Conversione e pulizia 'Costo Totale (€)'
-        col_costo = "Costo Totale (€)"
-        if col_costo in data.columns:
-            valori_puliti = (
-                data[col_costo]
-                .astype(str)
-                .str.replace("€", "", regex=False)
-                .str.replace(" ", "", regex=False)
-                .str.replace(",", ".", regex=False)
-            )
-            data[col_costo] = pd.to_numeric(
-                valori_puliti, errors="coerce"
-            ).fillna(0.0)
-
-        # Conversione Date
-        for col_date in ["Data Inizio", "Data Fine"]:
-            if col_date in data.columns:
-                data[col_date] = pd.to_datetime(
-                    data[col_date], errors="coerce"
-                )
-
-        # Conversione 'Giorni'
-        if "Giorni" in data.columns:
-            data["Giorni"] = pd.to_numeric(
-                data["Giorni"], errors="coerce"
-            ).fillna(0)
-
-        return data
+        # Usa URL encoding per gli spazi nei nomi dei fogli
+        url_parco = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=Parco%20Auto"
+        url_storico = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv&sheet=Storico%20Noleggi"
+        
+        df_parco = pd.read_csv(url_parco)
+        df_storico = pd.read_csv(url_storico)
+        
+        # Pulisci e converti i costi nello storico se esistono
+        if "Costo Totale (€)" in df_storico.columns:
+            valori_puliti = df_storico["Costo Totale (€)"].astype(str).str.replace("€", "").str.replace(",", ".")
+            df_storico["Costo Totale (€)"] = pd.to_numeric(valori_puliti, errors="coerce").fillna(0.0)
+            
+        return df_parco, df_storico
     except Exception as e:
-        st.error(f"Impossibile leggere il Foglio Google: {e}")
-        return pd.DataFrame()
+        st.warning("Impossibile caricare i dati. Assicurati che il Foglio Google abbia due schede nominate esattamente 'Parco Auto' e 'Storico Noleggi'.")
+        return pd.DataFrame(), pd.DataFrame()
 
-
-df = carica_dati()
+df_parco, df_storico = carica_dati_fogli()
 
 # ---------------------------------------------------------
-# 3. Layout a Schede (Tab)
+# LAYOUT A TAB
 # ---------------------------------------------------------
 tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo = st.tabs([
-    "📊 Dashboard & Analytics",
-    "🔑 Rientro Veicolo",
-    "📜 Storico & Ricerca",
-    "📋 Registro Parco Auto",
-    "➕ Inserisci Veicolo / Noleggio",
+    "📊 Dashboard", "🔑 Rientro", "📜 Storico Noleggi", "📋 Parco Auto", "➕ Nuovo"
 ])
 
 # =========================================================
-# TAB 1: DASHBOARD & STATISTICHE
+# TAB 1: DASHBOARD
 # =========================================================
 with tab_dash:
-    st.subheader("📊 Panoramica & Statistiche Avanzate")
-
-    if not df.empty:
-        tot_veicoli = len(df)
-        noleggiati = (
-            len(df[df["Stato"] == "Noleggiata"]) if "Stato" in df.columns else 0
-        )
-        tasso_occupazione = (
-            (noleggiati / tot_veicoli * 100) if tot_veicoli > 0 else 0
-        )
-
-        incasso_totale = (
-            df["Costo Totale (€)"].sum()
-            if "Costo Totale (€)" in df.columns
-            else 0
-        )
-        durata_media = (
-            df[df["Giorni"] > 0]["Giorni"].mean()
-            if "Giorni" in df.columns
-            else 0
-        )
-        incasso_medio = (
-            df[df["Costo Totale (€)"] > 0]["Costo Totale (€)"].mean()
-            if "Costo Totale (€)" in df.columns
-            else 0
-        )
-
-        # Metric Cards - KPI Primari
-        kpi1, kpi2, kpi3, kpi4 = st.columns(4)
-        kpi1.metric("Incasso Totale", f"€ {incasso_totale:,.2f}")
-        kpi2.metric("Tasso Occupazione", f"{tasso_occupazione:.1f}%")
-        kpi3.metric(
-            "Incasso Medio / Noleggio",
-            (
-                f"€ {incasso_medio:.2f}"
-                if not pd.isna(incasso_medio)
-                else "€ 0.00"
-            ),
-        )
-        kpi4.metric(
-            "Durata Media Noleggio",
-            (
-                f"{durata_media:.1f} gg"
-                if not pd.isna(durata_media)
-                else "0 gg"
-            ),
-        )
-
+    st.subheader("📊 Panoramica & Statistiche")
+    if not df_parco.empty:
+        tot_veicoli = len(df_parco)
+        noleggiati = len(df_parco[df_parco.get("Stato", "") == "Noleggiata"])
+        tasso = (noleggiati / tot_veicoli * 100) if tot_veicoli > 0 else 0
+        
+        incasso_totale = df_storico["Costo Totale (€)"].sum() if not df_storico.empty else 0.0
+        noleggi_totali = len(df_storico) if not df_storico.empty else 0
+        
+        k1, k2, k3, k4 = st.columns(4)
+        k1.metric("Veicoli Totali", tot_veicoli)
+        k2.metric("In Noleggio", noleggiati)
+        k3.metric("Tasso Occupazione", f"{tasso:.1f}%")
+        k4.metric("Incasso Storico", f"€ {incasso_totale:,.2f}")
+        
         st.divider()
-
-        # Grafici Analitici
         col_g1, col_g2 = st.columns(2)
-
         with col_g1:
-            st.write("📈 **Trend Incassi nel Tempo**")
-            if (
-                "Data Inizio" in df.columns
-                and "Costo Totale (€)" in df.columns
-            ):
-                df_trend = (
-                    df.dropna(subset=["Data Inizio"])
-                    .set_index("Data Inizio")
-                    .resample("ME")["Costo Totale (€)"]
-                    .sum()
-                    .reset_index()
-                )
-                if not df_trend.empty:
-                    df_trend["Data Inizio"] = df_trend[
-                        "Data Inizio"
-                    ].dt.strftime("%Y-%m")
-                    st.line_chart(
-                        df_trend.set_index("Data Inizio")["Costo Totale (€)"]
-                    )
-                else:
-                    st.caption("Dati temporali insufficienti per il grafico.")
-
+            st.write("📊 **Stato Flotta Attuale**")
+            if "Stato" in df_parco.columns:
+                st.bar_chart(df_parco["Stato"].value_counts())
         with col_g2:
-            st.write("🏷️ **Ricavi Totali per Categoria**")
-            if (
-                "Categoria" in df.columns
-                and "Costo Totale (€)" in df.columns
-            ):
-                cat_chart = df.groupby("Categoria")["Costo Totale (€)"].sum()
-                st.bar_chart(cat_chart)
-
-        col_g3, col_g4 = st.columns(2)
-        with col_g3:
-            st.write("🚘 **Top 5 Veicoli per Incasso Generato**")
-            if (
-                "Targa Auto" in df.columns
-                and "Costo Totale (€)" in df.columns
-            ):
-                top_veicoli = (
-                    df.groupby(["Targa Auto", "Marca", "Modello"])[
-                        "Costo Totale (€)"
-                    ]
-                    .sum()
-                    .reset_index()
-                    .sort_values(by="Costo Totale (€)", ascending=False)
-                    .head(5)
-                )
-                st.dataframe(
-                    top_veicoli, use_container_width=True, hide_index=True
-                )
-
-        with col_g4:
-            st.write("📊 **Ripartizione Stato Parco Auto**")
-            if "Stato" in df.columns:
-                st.bar_chart(df["Stato"].value_counts())
-
-    else:
-        st.info("Nessun dato disponibile nel Foglio Google.")
+            st.write("📈 **Noleggi Conclusi per Targa**")
+            if not df_storico.empty and "Targa Auto" in df_storico.columns:
+                st.bar_chart(df_storico["Targa Auto"].value_counts())
 
 # =========================================================
-# TAB 2: RIENTRO VEICOLO (REVISIONATO SENZA BUG DI RE-RENDER)
+# TAB 2: RIENTRO VEICOLO
 # =========================================================
 with tab_rientro:
     st.subheader("🔑 Check-in e Rientro Veicolo")
-
-    if not df.empty and "Stato" in df.columns:
-        df_noleggiate = df[df["Stato"] == "Noleggiata"]
-
+    
+    if not df_parco.empty and "Stato" in df_parco.columns:
+        df_noleggiate = df_parco[df_parco["Stato"] == "Noleggiata"]
+        
         if df_noleggiate.empty:
-            st.success(
-                "🎉 Nessun veicolo attualmente in noleggio! Tutto il parco auto"
-                " è disponibile o in manutenzione."
-            )
+            st.success("Tutto il parco auto è attualmente disponibile o in manutenzione.")
         else:
-            auto_opzioni = df_noleggiate.apply(
-                lambda r: (
-                    f"{r.get('Targa Auto', '')} - {r.get('Marca', '')}"
-                    f" {r.get('Modello', '')} (Cliente:"
-                    f" {r.get('Cliente', 'N/D')})"
-                ),
-                axis=1,
-            ).tolist()
-
-            auto_scelta = st.selectbox(
-                "Seleziona il veicolo da far rientrare:", auto_opzioni
-            )
-
-            if auto_scelta:
-                targa_selezionata = auto_scelta.split(" - ")[0]
-                veicolo = df_noleggiate[
-                    df_noleggiate["Targa Auto"] == targa_selezionata
-                ].iloc[0]
-
+            opzioni = df_noleggiate.apply(lambda r: f"{r.get('Targa Auto', '')} - {r.get('Marca', '')} ({r.get('Cliente Attuale', 'N/D')})", axis=1).tolist()
+            scelta = st.selectbox("Seleziona il veicolo da far rientrare:", opzioni)
+            
+            if scelta:
+                targa_sel = scelta.split(" - ")[0]
+                v = df_noleggiate[df_noleggiate["Targa Auto"] == targa_sel].iloc[0]
+                
+                c1, c2 = st.columns(2)
+                c1.markdown(f"**Targa:** {v.get('Targa Auto', '')} | **Cliente:** {v.get('Cliente Attuale', '')}")
+                
+                data_inizio_str = v.get("Data Inizio Noleggio", "")
+                data_inizio_dt = pd.to_datetime(data_inizio_str, errors="coerce")
+                
+                c2.markdown(f"**Data Uscita:** {data_inizio_str}")
+                prezzo = float(v.get("Prezzo Giornaliero", 0.0))
+                
                 st.divider()
-
-                # Card Informativa Noleggio Attivo
-                st.markdown("### 📄 Dettagli Noleggio Attivo")
-                c1, c2, c3 = st.columns(3)
-
-                c1.markdown(f"**Targa:** `{veicolo.get('Targa Auto', '')}`")
-                c1.markdown(
-                    "**Veicolo:**"
-                    f" {veicolo.get('Marca', '')} {veicolo.get('Modello', '')}"
-                )
-
-                d_ini_val = veicolo.get("Data Inizio")
-                d_fin_val = veicolo.get("Data Fine")
-
-                d_ini_str = (
-                    d_ini_val.strftime("%Y-%m-%d")
-                    if pd.notna(d_ini_val)
-                    else "N/D"
-                )
-                d_fin_str = (
-                    d_fin_val.strftime("%Y-%m-%d")
-                    if pd.notna(d_fin_val)
-                    else "N/D"
-                )
-
-                prezzo_giornaliero = float(
-                    veicolo.get("Prezzo Giornaliero", 0.0) or 0.0
-                )
-
-                c2.markdown(f"**Cliente:** {veicolo.get('Cliente', 'N/D')}")
-                c2.markdown(f"**Data Inizio Noleggio:** {d_ini_str}")
-
-                c3.markdown(
-                    f"**Prezzo Giornaliero:** € {prezzo_giornaliero:.2f}"
-                )
-                c3.markdown(f"**Data Fine Prevista:** {d_fin_str}")
-
-                st.divider()
-
-                # Controlli fuori dal Form per consentire il ricalcolo in tempo reale
-                st.markdown("### 📝 Dati di Check-in")
-
-                r_col1, r_col2 = st.columns(2)
-                with r_col1:
-                    nuovo_stato = st.selectbox(
-                        "Nuovo Stato del Veicolo *",
-                        ["Disponibile", "In Manutenzione"],
-                        help=(
-                            "Seleziona 'In Manutenzione' se il veicolo"
-                            " necessita di manutenzione o pulizia."
-                        ),
-                    )
-                    data_rientro_effettiva = st.date_input(
-                        "Data Rientro Effettiva *", date.today()
-                    )
-
-                with r_col2:
-                    note_rientro = st.text_area(
-                        "Note Check-in",
-                        placeholder=(
-                            "Es: Carburante Ok, chilometraggio finale,"
-                            " eventuali danni riscontrati."
-                        ),
-                    )
-
-                # Ricalcolo dinamico istantaneo
-                if pd.notna(d_ini_val):
-                    d_ini_date = (
-                        d_ini_val.date()
-                        if isinstance(d_ini_val, pd.Timestamp)
-                        else d_ini_val
-                    )
-                    giorni_effettivi = (
-                        data_rientro_effettiva - d_ini_date
-                    ).days
-                    giorni_effettivi = (
-                        1 if giorni_effettivi < 1 else giorni_effettivi
-                    )
-                    costo_ricalcolato = giorni_effettivi * prezzo_giornaliero
-                    st.info(
-                        "📐 **Ricalcolo Noleggio:**"
-                        f" {giorni_effettivi} giorni effettivi ×"
-                        f" €{prezzo_giornaliero:.2f}/gg = **€"
-                        f" {costo_ricalcolato:.2f}**"
-                    )
+                r1, r2 = st.columns(2)
+                with r1:
+                    nuovo_stato = st.selectbox("Nuovo Stato Veicolo", ["Disponibile", "In Manutenzione"])
+                    data_rientro = st.date_input("Data Rientro Effettiva", date.today())
+                with r2:
+                    note_rientro = st.text_area("Note Check-in (Danni, Km, ecc.)")
+                
+                # Calcolo Dinamico
+                if pd.notna(data_inizio_dt):
+                    giorni = (data_rientro - data_inizio_dt.date()).days
+                    giorni = 1 if giorni < 1 else giorni
                 else:
-                    giorni_effettivi = int(veicolo.get("Giorni", 1))
-                    costo_ricalcolato = float(
-                        veicolo.get("Costo Totale (€)", 0.0)
-                    )
-
-                if st.button(
-                    "➕ Aggiungi Rientro e Modifica Stato", type="primary"
-                ):
+                    giorni = 1
+                    
+                costo_totale = giorni * prezzo
+                st.info(f"📐 **Calcolo:** {giorni} gg × €{prezzo:.2f} = **€ {costo_totale:.2f}**")
+                
+                if st.button("➕ Registra Rientro nello Storico", type="primary"):
+                    record_storico = {
+                        "id_noleggio": str(uuid.uuid4())[:8].upper(),
+                        "targa": targa_sel,
+                        "cliente": v.get("Cliente Attuale", "N/D"),
+                        "data_inizio": str(data_inizio_dt.date()) if pd.notna(data_inizio_dt) else "",
+                        "data_fine": str(data_rientro),
+                        "giorni": int(giorni),
+                        "costo_totale": float(costo_totale),
+                        "note": note_rientro.strip()
+                    }
+                    
+                    payload = {
+                        "action": "registra_rientro",
+                        "noleggio": record_storico,
+                        "nuovo_stato": nuovo_stato
+                    }
+                    
                     try:
-                        df_aggiornato = formatta_date_df(df)
-
-                        # FIX BUG INDICE: Cerca la riga specificamente Noleggiata per quella targa
-                     # 1. Trova la riga specifica dell'auto attualmente "Noleggiata"
-idx = df_aggiornato[
-    (df_aggiornato["Targa Auto"] == targa_selezionata)
-    & (df_aggiornato["Stato"] == "Noleggiata")
-].index
-
-if len(idx) > 0:
-    i = idx[0]
-
-    # 2. Aggiorna lo stato, la data di fine e ricalcola giorni/costo
-    df_aggiornato.loc[i, "Stato"] = nuovo_stato  # es. 'Disponibile'
-    df_aggiornato.loc[i, "Data Fine"] = str(data_rientro_effettiva)
-    df_aggiornato.loc[i, "Giorni"] = int(giorni_effettivi)
-    df_aggiornato.loc[i, "Costo Totale (€)"] = float(costo_ricalcolato)
-
-    # 3. Aggiunge la nota di rientro mantenendo le note precedenti
-    note_esistenti = str(df_aggiornato.loc[i, "Note"]) if pd.notna(df_aggiornato.loc[i, "Note"]) else ""
-    tag = f"[Rientro {data_rientro_effettiva}: {note_rientro}]" if note_rientro else f"[Rientro {data_rientro_effettiva}]"
-    df_aggiornato.loc[i, "Note"] = f"{note_esistenti} {tag}".strip()
-
-    # 4. Invia i dati aggiornati a Google Sheets via Webhook POST
-    payload = {
-        "action": "update_all",
-        "rows": df_aggiornato.fillna("").to_dict(orient="records"),
-    }
-    response = requests.post(APPS_SCRIPT_URL, json=payload)
-                            )
-                            if response.status_code == 200:
-                                st.success(
-                                    "✅ Rientro registrato con successo! Stato"
-                                    f" veicolo {targa_selezionata} modificato in"
-                                    f" '{nuovo_stato}'."
-                                )
-                                st.cache_data.clear()
-                                time.sleep(1)
-                                st.rerun()
-                            else:
-                                st.error(
-                                    "Errore durante il salvataggio:"
-                                    f" {response.status_code}"
-                                )
+                        res = requests.post(APPS_SCRIPT_URL, json=payload)
+                        if res.status_code == 200:
+                            st.success(f"✅ Rientro salvato! Auto {targa_sel} ora {nuovo_stato}.")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"Errore Server: {res.status_code}")
                     except Exception as e:
-                        st.error(f"Errore durante l'operazione: {e}")
-    else:
-        st.info("Nessun dato disponibile.")
+                        st.error(f"Errore Connessione: {e}")
 
 # =========================================================
-# TAB 3: STORICO & RICERCA FILTRATA
+# TAB 3: STORICO NOLEGGI
 # =========================================================
 with tab_storico:
-    st.subheader("📜 Storico Noleggi e Filtri Avanzati")
-
-    if not df.empty:
-        f1, f2, f3 = st.columns(3)
-
-        with f1:
-            testo_ricerca = st.text_input("🔍 Cerca Targa o Cliente", "")
-
-        with f2:
-            stati_disponibili = (
-                ["Tutti"] + list(df["Stato"].dropna().unique())
-                if "Stato" in df.columns
-                else ["Tutti"]
-            )
-            stato_selezionato = st.selectbox(
-                "Filtra per Stato", stati_disponibili
-            )
-
-        with f3:
-            range_date = st.date_input(
-                "Intervallo Data Inizio",
-                value=(),
-                help=(
-                    "Seleziona la data di inizio e di fine per filtrare lo"
-                    " storico"
-                ),
-            )
-
-        df_filtrato = df.copy()
-
-        if testo_ricerca:
-            mask_targa = (
-                df_filtrato["Targa Auto"]
-                .astype(str)
-                .str.contains(testo_ricerca, case=False, na=False)
-                if "Targa Auto" in df_filtrato.columns
-                else False
-            )
-            mask_cliente = (
-                df_filtrato["Cliente"]
-                .astype(str)
-                .str.contains(testo_ricerca, case=False, na=False)
-                if "Cliente" in df_filtrato.columns
-                else False
-            )
-            df_filtrato = df_filtrato[mask_targa | mask_cliente]
-
-        if stato_selezionato != "Tutti" and "Stato" in df_filtrato.columns:
-            df_filtrato = df_filtrato[
-                df_filtrato["Stato"] == stato_selezionato
-            ]
-
-        if len(range_date) == 2 and "Data Inizio" in df_filtrato.columns:
-            d_inizio, d_fine = pd.to_datetime(range_date[0]), pd.to_datetime(
-                range_date[1]
-            )
-            df_filtrato = df_filtrato[
-                (df_filtrato["Data Inizio"] >= d_inizio)
-                & (df_filtrato["Data Inizio"] <= d_fine)
-            ]
-
-        st.markdown(f"**Risultati trovati:** {len(df_filtrato)}")
-        c_incasso = (
-            df_filtrato["Costo Totale (€)"].sum()
-            if "Costo Totale (€)" in df_filtrato.columns
-            else 0
-        )
-        c_giorni = (
-            df_filtrato["Giorni"].sum()
-            if "Giorni" in df_filtrato.columns
-            else 0
-        )
-
-        rf1, rf2 = st.columns(2)
-        rf1.info(f"💰 **Incasso Totale Filtrato:** € {c_incasso:,.2f}")
-        rf2.info(
-            f"📅 **Giorni Noleggio Totali Filtrati:** {int(c_giorni)} giorni"
-        )
-
-        df_display = formatta_date_df(df_filtrato)
-        st.dataframe(df_display, use_container_width=True, hide_index=True)
-
-        csv_data = df_display.to_csv(index=False).encode("utf-8")
-        st.download_button(
-            label="📥 Scarica Storico Filtrato (CSV)",
-            data=csv_data,
-            file_name="storico_noleggi.csv",
-            mime="text/csv",
-        )
+    st.subheader("📜 Archivio Storico Noleggi")
+    if not df_storico.empty:
+        cerca = st.text_input("🔍 Cerca Targa o Cliente nello storico")
+        df_s = df_storico.copy()
+        
+        if cerca:
+            mask = df_s.astype(str).apply(lambda r: r.str.contains(cerca, case=False).any(), axis=1)
+            df_s = df_s[mask]
+            
+        df_disp = formatta_date(df_s)
+        st.dataframe(df_disp, use_container_width=True, hide_index=True)
     else:
-        st.warning("Nessun dato disponibile.")
+        st.info("Nessun dato nello Storico Noleggi. Registra il primo rientro per popolarlo!")
 
 # =========================================================
-# TAB 4: REGISTRO PARCO AUTO (EDITABILE)
+# TAB 4: REGISTRO PARCO AUTO
 # =========================================================
 with tab_registro:
-    st.subheader("📋 Registro Completo (Modifica e Salvataggio)")
-
-    if "modalita_modifica" not in st.session_state:
-        st.session_state.modalita_modifica = False
-
-    if not df.empty:
-        search_query = st.text_input(
-            "🔍 Cerca nel registro",
-            "",
-            disabled=st.session_state.modalita_modifica,
-            help=(
-                "Disabilitato in modalità modifica per prevenire perdite di"
-                " dati."
-                if st.session_state.modalita_modifica
-                else ""
-            ),
-        )
-
-        if search_query and not st.session_state.modalita_modifica:
-            df_reg = df[
-                df.astype(str).apply(
-                    lambda r: r.str.contains(search_query, case=False).any(),
-                    axis=1,
-                )
-            ]
+    st.subheader("📋 Gestione Flotta Attiva")
+    
+    if "edit_mode" not in st.session_state:
+        st.session_state.edit_mode = False
+        
+    if not df_parco.empty:
+        if not st.session_state.edit_mode:
+            if st.button("✏️ Abilita Modifica Tabella"):
+                st.session_state.edit_mode = True
+                st.rerun()
+            st.dataframe(formatta_date(df_parco), use_container_width=True, hide_index=True)
         else:
-            df_reg = df.copy()
-
-        st.divider()
-
-        if not st.session_state.modalita_modifica:
-            col_a, _ = st.columns([2, 5])
-            with col_a:
-                if st.button("✏️ Abilita Modifica", type="secondary"):
-                    st.session_state.modalita_modifica = True
-                    st.rerun()
-
-            st.caption(
-                "🔒 **Modalità Lettura**: Clicca su *✏️ Abilita Modifica* per"
-                " apportare cambiamenti alla tabella."
-            )
-
-            df_reg_disp = formatta_date_df(df_reg)
-            st.dataframe(
-                df_reg_disp, use_container_width=True, hide_index=True
-            )
-
-        else:
-            col_btn1, col_btn2, _ = st.columns([2, 2, 4])
-            with col_btn1:
-                tasto_salva = st.button(
-                    "💾 Salva Modifiche su Google Sheets", type="primary"
-                )
-            with col_btn2:
-                if st.button("❌ Annulla Modifiche"):
-                    st.session_state.modalita_modifica = False
-                    st.rerun()
-
-            st.caption(
-                "💡 Spunta la casella 'Elimina' sulle righe da rimuovere o"
-                " modifica i dati direttamente nella tabella."
-            )
-
-            df_editabile = formatta_date_df(df)
-
-            if "Elimina" not in df_editabile.columns:
-                df_editabile.insert(0, "Elimina", False)
-
-            edited_df = st.data_editor(
-                df_editabile,
-                use_container_width=True,
-                hide_index=True,
-                column_config={
-                    "Elimina": st.column_config.CheckboxColumn(
-                        "🗑️ Elimina?",
-                        help="Spunta per rimuovere la riga",
-                        default=False,
-                    )
-                },
-            )
-
-            if tasto_salva:
+            c1, c2 = st.columns([2, 8])
+            if c1.button("💾 Salva Modifiche", type="primary"):
+                # Salva i dati
+                df_clean = st.session_state.edited_data.fillna("")
+                payload = {"action": "update_parco", "rows": df_clean.to_dict(orient="records")}
                 try:
-                    df_final = edited_df[
-                        edited_df["Elimina"] == False
-                    ].drop(columns=["Elimina"])
-                    df_pulito = df_final.fillna("")
-
-                    payload = {
-                        "action": "update_all",
-                        "rows": df_pulito.to_dict(orient="records"),
-                    }
-
-                    response = requests.post(APPS_SCRIPT_URL, json=payload)
-                    if response.status_code == 200:
-                        st.success("✅ Salvataggio completato!")
-                        st.session_state.modalita_modifica = False
+                    r = requests.post(APPS_SCRIPT_URL, json=payload)
+                    if r.status_code == 200:
+                        st.success("Salvataggio completato!")
+                        st.session_state.edit_mode = False
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
-                    else:
-                        st.error(
-                            "Errore durante il salvataggio:"
-                            f" {response.status_code}"
-                        )
                 except Exception as e:
-                    st.error(f"Errore di connessione: {e}")
+                    st.error(f"Errore: {e}")
+            if c2.button("❌ Annulla"):
+                st.session_state.edit_mode = False
+                st.rerun()
+                
+            st.session_state.edited_data = st.data_editor(formatta_date(df_parco), use_container_width=True, hide_index=True)
     else:
-        st.warning("Nessun dato trovato.")
+        st.warning("Parco Auto vuoto.")
 
 # =========================================================
-# TAB 5: NUOVO INSERIMENTO
+# TAB 5: NUOVO VEICOLO
 # =========================================================
 with tab_nuovo:
-    st.subheader("➕ Inserisci Registrazione")
-
-    with st.form("form_noleggio", clear_on_submit=True):
-        col1, col2 = st.columns(2)
-
-        with col1:
+    st.subheader("➕ Inserisci Nuovo Veicolo in Flotta")
+    
+    with st.form("form_nuovo_veicolo", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+        with c1:
             targa = st.text_input("Targa Auto *").upper()
             marca = st.text_input("Marca *")
             modello = st.text_input("Modello *")
-            categoria = st.selectbox(
-                "Categoria",
-                ["Utilitaria", "Berlina", "SUV", "Station Wagon", "Furgone"],
-            )
-            anno_imm = st.number_input(
-                "Anno immatricolazione",
-                min_value=1990,
-                max_value=2030,
-                value=2023,
-            )
-
-        with col2:
-            prezzo_giornaliero = st.number_input(
-                "Prezzo Giornaliero (€) *", min_value=0.0, value=50.0
-            )
-            cliente = st.text_input("Cliente")
-            stato = st.selectbox(
-                "Stato Veicolo",
-                ["Disponibile", "Noleggiata", "In Manutenzione"],
-            )
-
-            data_inizio = st.date_input("Data Inizio Noleggio", date.today())
-            data_fine = st.date_input("Data Fine Noleggio", date.today())
-            note = st.text_area("Note")
-
-        giorni = (data_fine - data_inizio).days
-        giorni = 1 if giorni < 1 else giorni
-        costo_totale = (
-            giorni * prezzo_giornaliero if stato == "Noleggiata" else 0.0
-        )
-
-        if stato == "Noleggiata":
-            st.info(
-                "📐 **Costo Calcolato:**"
-                f" {giorni} giorni × €{prezzo_giornaliero:.2f} ="
-                f" **€{costo_totale:.2f}**"
-            )
-
-        submit = st.form_submit_button("💾 Aggiungi Nuovo Veicolo")
-
-        if submit:
+            cat = st.selectbox("Categoria", ["Utilitaria", "Berlina", "SUV", "Furgone"])
+            anno = st.number_input("Anno", 1990, 2030, 2024)
+        with c2:
+            prezzo = st.number_input("Prezzo Giornaliero Base (€) *", min_value=0.0, value=50.0)
+            stato = st.selectbox("Stato Iniziale", ["Disponibile", "In Manutenzione"])
+            note = st.text_area("Note aggiuntive")
+            
+        submitted = st.form_submit_button("💾 Aggiungi alla Flotta")
+        
+        if submitted:
             if not targa or not marca or not modello:
-                st.error("Compila i campi obbligatori: Targa, Marca e Modello.")
+                st.error("Compila Targa, Marca e Modello.")
             else:
-                payload = {
-                    "action": "append",
-                    "Targa Auto": targa,
-                    "Marca": marca,
-                    "Modello": modello,
-                    "Categoria": categoria,
-                    "Prezzo Giornaliero": prezzo_giornaliero,
-                    "Anno immatricolazione": int(anno_imm),
-                    "Cliente": cliente if cliente else "N/D",
-                    "Stato": stato,
-                    "Data Inizio": (
-                        str(data_inizio) if stato == "Noleggiata" else ""
-                    ),
-                    "Data Fine": (
-                        str(data_fine) if stato == "Noleggiata" else ""
-                    ),
-                    "Giorni": giorni if stato == "Noleggiata" else 0,
-                    "Costo Totale (€)": costo_totale,
-                    "Note": note,
+                row_data = {
+                    "Targa Auto": targa, "Marca": marca, "Modello": modello,
+                    "Categoria": cat, "Anno": int(anno), "Prezzo Giornaliero": float(prezzo),
+                    "Stato": stato, "Cliente Attuale": "N/D", "Data Inizio Noleggio": "", "Note": note
                 }
-
+                
+                payload = {"action": "append_parco", "row": row_data}
                 try:
-                    response = requests.post(APPS_SCRIPT_URL, json=payload)
-                    if response.status_code == 200:
-                        st.success(f"Veicolo {targa} salvato correttamente!")
+                    req = requests.post(APPS_SCRIPT_URL, json=payload)
+                    if req.status_code == 200:
+                        st.success("Veicolo aggiunto con successo!")
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
-                    else:
-                        st.error(
-                            "Errore nella risposta dello script:"
-                            f" {response.status_code}"
-                        )
                 except Exception as e:
-                    st.error(f"Errore di connessione: {e}")
+                    st.error(f"Errore: {e}")
