@@ -53,22 +53,21 @@ if not df_valid.empty:
 
     if col_costo in df_valid.columns:
         valori_puliti = (
-            df_valid[col_costo]
+        df_valid[col_costo]
             .astype(str)
             .str.replace('€', '', regex=False)
             .str.replace(' ', '', regex=False)
             .str.replace(',', '.', regex=False)
         )
         df_valid[col_costo] = pd.to_numeric(valori_puliti, errors='coerce').fillna(0)
-    else:
+else:
         st.error(f"Colonna '{col_costo}' non trovata nel foglio!")
         st.write("Colonne trovate:", list(df_valid.columns))
         
         st.divider()
-        if "Categoria" in df_valid.columns:
-            st.write("**Veicoli per Categoria**")
-            st.bar_chart(df_valid["Categoria"].value_counts())
-    else:
+    if "Categoria" in df_valid.columns:
+        st.write("**Veicoli per Categoria**")
+        st.bar_chart(df_valid["Categoria"].value_counts())
         st.info("Nessun dato disponibile.")
 
 # --- TAB 2: Registro ---
