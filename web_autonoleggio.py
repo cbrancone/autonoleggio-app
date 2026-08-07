@@ -106,12 +106,17 @@ with tab_registro:
         )
         
         # Tasto per salvare le modifiche su Google Sheets
+      # Tasto per salvare le modifiche su Google Sheets
         if st.button("💾 Salva Modifiche su Google Sheets", type="primary"):
             try:
+                # 1. Sostituisce tutti i valori NaN / vuoti per renderli compatibili con il JSON
+                df_pulito = edited_df.fillna("")
+                
                 payload = {
                     "action": "update_all",
-                    "rows": edited_df.to_dict(orient="records")
+                    "rows": df_pulito.to_dict(orient="records")
                 }
+                
                 response = requests.post(APPS_SCRIPT_URL, json=payload)
                 if response.status_code == 200:
                     st.success("✅ Foglio Google aggiornato con successo!")
