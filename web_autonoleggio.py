@@ -85,10 +85,14 @@ with tab_dash:
         st.info("Nessun dato disponibile nel Foglio Google.")
 
 # --- TAB 2: Registro con Modifica e Salvataggio ---
+# --- TAB 2: Registro con Attivazione Modifica e Salvataggio ---
 with tab_registro:
-    st.subheader("📋 Registro Completo (Modifica Diretta)")
-    st.caption("💡 Puoi modificare le celle direttamente nella tabella sottostante e cliccare su **Salva Modifiche** per aggiornare il Foglio Google.")
+    st.subheader("📋 Registro Completo")
     
+    # 1. Inizializza lo stato di modifica nella sessione di Streamlit
+    if "modalita_modifica" not in st.session_state:
+        st.session_state.modalita_modifica = False
+
     if not df.empty:
         search_query = st.text_input("🔍 Cerca nel registro", "")
         
@@ -97,36 +101,62 @@ with tab_registro:
         else:
             df_filtrato = df.copy()
 
-        # Tabella INTERATTIVA modificabile
-        edited_df = st.data_editor(
-            df_filtrato, 
-            use_container_width=True, 
-            hide_index=True, 
-            num_rows="dynamic"
-        )
-        
-        # Tasto per salvare le modifiche su Google Sheets
-      # Tasto per salvare le modifiche su Google Sheets
-        if st.button("💾 Salva Modifiche su Google Sheets", type="primary"):
-            try:
-                # 1. Sostituisce tutti i valori NaN / vuoti per renderli compatibili con il JSON
-                df_pulito = edited_df.fillna("")
-                
-                payload = {
-                    "action": "update_all",
-                    "rows": df_pulito.to_dict(orient="records")
-                }
-                
-                response = requests.post(APPS_SCRIPT_URL, json=payload)
-                if response.status_code == 200:
-                    st.success("✅ Foglio Google aggiornato con successo!")
-                    st.cache_data.clear()
-                    time.sleep(1)
+        st.divider()
+
+        # 2. GESTIONE MODALITÀ LETTURA / MODIFICA
+        if not st.session_state.modalita_modifica:
+            # --- VISTA LETTURA ---
+            col_a, col_b = st.columns([2, 5])
+            with col_a:
+                if st.button("✏️ Abilita Modifica", type="secondary"):
+                    st.session_state.modalita_modifica = True
                     st.rerun()
-                else:
-                    st.error(f"Errore durante il salvataggio: {response.status_code}")
-            except Exception as e:
-                st.error(f"Errore di connessione: {e}")
+            
+            st.caption("🔒 **Modalità Lettura**: Clicca su *✏️ Abilita Modifica* per apportare cambiamenti alla tabella.")
+            
+            # Tabella di sola lettura
+            st.dataframe(df_filtrato, use_container_width=True, hide_index=True)
+
+        else:
+            # --- VISTA MODIFICA ATTIVA ---
+            col_btn1, col_btn2, _ = st.columns([2, 2, 4])
+            with col_btn1:
+                tasto_salva = st.button("💾 Salva Modifiche su Google Sheets", type="primary")
+            with col_btn2:
+                if st.button("❌ Annulla Modifiche"):
+                    st.session_state.modalita_modifica = False
+                    st.rerun()
+
+            st.caption("✏️ **Modalità Modifica Attiva**: Modifica le celle o aggiungi/rimuovi righe, quindi clicca su *Salva Modifiche*.")
+
+            # Tabella interattiva ed editabile
+            edited_df = st.data_editor(
+                df_filtrato, 
+                use_container_width=True, 
+                hide_index=True, 
+                num_rows="dynamic"
+            )
+
+            # Azione al click su "Salva Modifiche"
+            if tasto_salva:
+                try:
+                    df_pulito = edited_df.fillna("")
+                    payload = {
+                        "action": "update_all",
+                        "rows": df_pulito.to_dict(orient="records")
+                    }
+                    
+                    response = requests.post(APPS_SCRIPT_URL, json=payload)
+                    if response.status_code == 200:
+                        st.success("✅ Foglio Google aggiornato con successo!")
+                        st.session_state.modalita_modifica = False
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"Errore durante il salvataggio: {response.status_code}")
+                except Exception as e:
+                    st.error(f"Errore di connessione: {e}")
     else:
         st.warning("Nessun dato trovato.")
 
