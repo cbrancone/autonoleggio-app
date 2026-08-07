@@ -7,11 +7,11 @@ from datetime import date
 # CONFIGURAZIONE URL (Sostituisci con i tuoi link)
 # ---------------------------------------------------------
 # 1. URL fornito da Google Apps Script durante la distribuzione
-APPS_SCRIPT_URL = "https://docs.google.com/spreadsheets/d/1XEswSftbbHOuf-n3meGq1kzlN3OAYe3_tmN_l9bOKvo/edit?usp=sharing"
+APPS_SCRIPT_URL = "https://docs.google.com/spreadsheets/d/1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE/edit?usp=sharing"
 
 # 2. URL del tuo foglio Google per l'esportazione in CSV (sostituisci l'ID del foglio)
 # Nota: Il foglio deve essere impostato su "Chiunque abbia il link può visualizzare"
-SPREADSHEET_ID = "1XEswSftbbHOuf-n3meGq1kzlN3OAYe3_tmN_l9bOKvo/edit?usp=sharing"
+SPREADSHEET_ID = "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE/edit?usp=sharing"
 CSV_URL = f"https://docs.google.com/spreadsheets/d/{SPREADSHEET_ID}/gviz/tq?tqx=out:csv"
 # ---------------------------------------------------------
 # 1. Setup Pagina
