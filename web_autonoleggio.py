@@ -46,14 +46,27 @@ tab_dash, tab_registro, tab_nuovo = st.tabs([
 with tab_dash:
     st.subheader("📊 Panoramica Generale")
     if not df.empty:
-        df_valid = df.copy()
-        df_valid["Costo Totale (€)"] = pd.to_numeric(df_valid["Costo Totale (€)"], errors='coerce').fillna(0)
-        
-        c1, c2, c3, c4 = st.columns(4)
-        c1.metric("Totale Veicoli", len(df_valid))
-        c2.metric("In Noleggio", len(df_valid[df_valid["Stato"] == "Noleggiata"]) if "Stato" in df_valid.columns else 0)
-        c3.metric("Disponibili", len(df_valid[df_valid["Stato"] == "Disponibile"]) if "Stato" in df_valid.columns else 0)
-        c4.metric("Incasso Totale", f"€ {df_valid['Costo Totale (€)'].sum():,.2f}")
+        # 1. Rimuovi spazi nascosti prima e dopo i nomi di tutte le colonne
+df_valid.columns = df_valid.columns.str.strip()
+
+col_costo = "Costo Totale (€)"
+
+if col_costo in df_valid.columns:
+    # 2. Converti in testo, rimuovi '€' e spazi, e sostituisce le virgole coi punti per i decimali
+    valori_puliti = (
+        df_valid[col_costo]
+        .astype(str)
+        .str.replace('€', '', regex=False)
+        .str.replace(' ', '', regex=False)
+        .str.replace(',', '.', regex=False)
+    )
+    
+    # 3. Converti in numero e imposta a 0 i valori non validi o vuoti
+    df_valid[col_costo] = pd.to_numeric(valori_puliti, errors='coerce').fillna(0)
+else:
+    # Mostra l'errore su Streamlit elencando i nomi reali delle colonne presenti
+    st.error(f"Colonna '{col_costo}' non trovata nel foglio!")
+    st.write("Verifica se la colonna ha un nome diverso tra queste:", list(df_valid.columns))
         
         st.divider()
         if "Categoria" in df_valid.columns:
