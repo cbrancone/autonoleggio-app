@@ -5,10 +5,15 @@ import requests
 import streamlit as st
 
 # ---------------------------------------------------------
-# CONFIGURAZIONE URL
+# CONFIGURAZIONE URL (supporta st.secrets se configurati)
 # ---------------------------------------------------------
-SPREADSHEET_ID = "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE"
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzIMY05XhfUpztNADq1KlBC3vJxxdOGWisOdJDyrDXR2c6ZWiAiphJkL3aNvjAoBhS0-Q/exec"
+SPREADSHEET_ID = st.secrets.get(
+    "SPREADSHEET_ID", "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE"
+)
+APPS_SCRIPT_URL = st.secrets.get(
+    "APPS_SCRIPT_URL",
+    "https://script.google.com/macros/s/AKfycbzIMY05XhfUpztNADq1KlBC3vJxxdOGWisOdJDyrDXR2c6ZWiAiphJkL3aNvjAoBhS0-Q/exec",
+)
 
 # ---------------------------------------------------------
 # 1. Setup Pagina
@@ -17,6 +22,16 @@ st.set_page_config(
     page_title="Gestione Autonoleggio", page_icon="🚗", layout="wide"
 )
 st.title("🚗 Sistema Gestione Autonoleggio")
+
+
+# Helper per la formattazione pulita delle date
+def formatta_date_df(dataframe, colonne_date=["Data Inizio", "Data Fine"]):
+    df_out = dataframe.copy()
+    for col in colonne_date:
+        if col in df_out.columns:
+            df_out[col] = pd.to_datetime(df_out[col], errors="coerce")
+            df_out[col] = df_out[col].dt.strftime("%Y-%m-%d").fillna("")
+    return df_out
 
 
 # ---------------------------------------------------------
@@ -41,14 +56,16 @@ def carica_dati():
                 .str.replace(" ", "", regex=False)
                 .str.replace(",", ".", regex=False)
             )
-            data[col_costo] = pd.to_numeric(valori_puliti, errors="coerce").fillna(
-                0.0
-            )
+            data[col_costo] = pd.to_numeric(
+                valori_puliti, errors="coerce"
+            ).fillna(0.0)
 
         # Conversione Date
         for col_date in ["Data Inizio", "Data Fine"]:
             if col_date in data.columns:
-                data[col_date] = pd.to_datetime(data[col_date], errors="coerce")
+                data[col_date] = pd.to_datetime(
+                    data[col_date], errors="coerce"
+                )
 
         # Conversione 'Giorni'
         if "Giorni" in data.columns:
@@ -112,11 +129,19 @@ with tab_dash:
         kpi2.metric("Tasso Occupazione", f"{tasso_occupazione:.1f}%")
         kpi3.metric(
             "Incasso Medio / Noleggio",
-            f"€ {incasso_medio:.2f}" if not pd.isna(incasso_medio) else "€ 0.00",
+            (
+                f"€ {incasso_medio:.2f}"
+                if not pd.isna(incasso_medio)
+                else "€ 0.00"
+            ),
         )
         kpi4.metric(
             "Durata Media Noleggio",
-            f"{durata_media:.1f} gg" if not pd.isna(durata_media) else "0 gg",
+            (
+                f"{durata_media:.1f} gg"
+                if not pd.isna(durata_media)
+                else "0 gg"
+            ),
         )
 
         st.divider()
@@ -133,14 +158,14 @@ with tab_dash:
                 df_trend = (
                     df.dropna(subset=["Data Inizio"])
                     .set_index("Data Inizio")
-                    .resample("M")["Costo Totale (€)"]
+                    .resample("ME")["Costo Totale (€)"]
                     .sum()
                     .reset_index()
                 )
                 if not df_trend.empty:
-                    df_trend["Data Inizio"] = df_trend["Data Inizio"].dt.strftime(
-                        "%Y-%m"
-                    )
+                    df_trend["Data Inizio"] = df_trend[
+                        "Data Inizio"
+                    ].dt.strftime("%Y-%m")
                     st.line_chart(
                         df_trend.set_index("Data Inizio")["Costo Totale (€)"]
                     )
@@ -185,7 +210,7 @@ with tab_dash:
         st.info("Nessun dato disponibile nel Foglio Google.")
 
 # =========================================================
-# TAB 2: RIENTRO VEICOLO (CHECK-IN E MODIFICA STATO)
+# TAB 2: RIENTRO VEICOLO (REVISIONATO SENZA BUG DI RE-RENDER)
 # =========================================================
 with tab_rientro:
     st.subheader("🔑 Check-in e Rientro Veicolo")
@@ -195,8 +220,8 @@ with tab_rientro:
 
         if df_noleggiate.empty:
             st.success(
-                "🎉 Nessun veicolo attualmente in noleggio! Tutto il parco auto è"
-                " disponibile o in manutenzione."
+                "🎉 Nessun veicolo attualmente in noleggio! Tutto il parco auto"
+                " è disponibile o in manutenzione."
             )
         else:
             auto_opzioni = df_noleggiate.apply(
@@ -251,145 +276,133 @@ with tab_rientro:
                 c2.markdown(f"**Cliente:** {veicolo.get('Cliente', 'N/D')}")
                 c2.markdown(f"**Data Inizio Noleggio:** {d_ini_str}")
 
-                c3.markdown(f"**Prezzo Giornaliero:** € {prezzo_giornaliero:.2f}")
+                c3.markdown(
+                    f"**Prezzo Giornaliero:** € {prezzo_giornaliero:.2f}"
+                )
                 c3.markdown(f"**Data Fine Prevista:** {d_fin_str}")
 
                 st.divider()
 
-                # Form per il Rientro del Veicolo
-                with st.form("form_rientro"):
-                    st.markdown("### 📝 Dati di Check-in")
+                # Controlli fuori dal Form per consentire il ricalcolo in tempo reale
+                st.markdown("### 📝 Dati di Check-in")
 
-                    r_col1, r_col2 = st.columns(2)
-                    with r_col1:
-                        nuovo_stato = st.selectbox(
-                            "Nuovo Stato del Veicolo *",
-                            ["Disponibile", "In Manutenzione"],
-                            help=(
-                                "Seleziona 'In Manutenzione' se il veicolo"
-                                " necessita di manutenzione o pulizia."
-                            ),
-                        )
-                        data_rientro_effettiva = st.date_input(
-                            "Data Rientro Effettiva *", date.today()
-                        )
-
-                    with r_col2:
-                        note_rientro = st.text_area(
-                            "Note Check-in",
-                            placeholder=(
-                                "Es: Carburante Ok, chilometraggio finale,"
-                                " eventuali danni riscontrati."
-                            ),
-                        )
-
-                    # Ricalcolo dei Giorni ed dell'Incasso in base alla data effettiva
-                    if pd.notna(d_ini_val):
-                        d_ini_date = (
-                            d_ini_val.date()
-                            if isinstance(d_ini_val, pd.Timestamp)
-                            else d_ini_val
-                        )
-                        giorni_effettivi = (
-                            data_rientro_effettiva - d_ini_date
-                        ).days
-                        giorni_effettivi = (
-                            1 if giorni_effettivi < 1 else giorni_effettivi
-                        )
-                        costo_ricalcolato = (
-                            giorni_effettivi * prezzo_giornaliero
-                        )
-                        st.info(
-                            "📐 **Ricalcolo Noleggio:**"
-                            f" {giorni_effettivi} giorni effettivi ×"
-                            f" €{prezzo_giornaliero:.2f}/gg = **€"
-                            f" {costo_ricalcolato:.2f}**"
-                        )
-                    else:
-                        giorni_effettivi = int(veicolo.get("Giorni", 1))
-                        costo_ricalcolato = float(
-                            veicolo.get("Costo Totale (€)", 0.0)
-                        )
-
-                    # Tasto esplicito per inviare e salvare la modifica dello stato
-                    btn_aggiungi_rientro = st.form_submit_button(
-                        "➕ Aggiungi Rientro e Modifica Stato", type="primary"
+                r_col1, r_col2 = st.columns(2)
+                with r_col1:
+                    nuovo_stato = st.selectbox(
+                        "Nuovo Stato del Veicolo *",
+                        ["Disponibile", "In Manutenzione"],
+                        help=(
+                            "Seleziona 'In Manutenzione' se il veicolo"
+                            " necessita di manutenzione o pulizia."
+                        ),
+                    )
+                    data_rientro_effettiva = st.date_input(
+                        "Data Rientro Effettiva *", date.today()
                     )
 
-                    if btn_aggiungi_rientro:
-                        try:
-                            df_aggiornato = df.copy()
+                with r_col2:
+                    note_rientro = st.text_area(
+                        "Note Check-in",
+                        placeholder=(
+                            "Es: Carburante Ok, chilometraggio finale,"
+                            " eventuali danni riscontrati."
+                        ),
+                    )
 
-                            # Formattazione stringhe date per l'esportazione
-                            for c in ["Data Inizio", "Data Fine"]:
-                                if c in df_aggiornato.columns:
-                                    df_aggiornato[c] = (
-                                        df_aggiornato[c]
-                                        .dt.strftime("%Y-%m-%d")
-                                        .fillna("")
-                                    )
+                # Ricalcolo dinamico istantaneo
+                if pd.notna(d_ini_val):
+                    d_ini_date = (
+                        d_ini_val.date()
+                        if isinstance(d_ini_val, pd.Timestamp)
+                        else d_ini_val
+                    )
+                    giorni_effettivi = (
+                        data_rientro_effettiva - d_ini_date
+                    ).days
+                    giorni_effettivi = (
+                        1 if giorni_effettivi < 1 else giorni_effettivi
+                    )
+                    costo_ricalcolato = giorni_effettivi * prezzo_giornaliero
+                    st.info(
+                        "📐 **Ricalcolo Noleggio:**"
+                        f" {giorni_effettivi} giorni effettivi ×"
+                        f" €{prezzo_giornaliero:.2f}/gg = **€"
+                        f" {costo_ricalcolato:.2f}**"
+                    )
+                else:
+                    giorni_effettivi = int(veicolo.get("Giorni", 1))
+                    costo_ricalcolato = float(
+                        veicolo.get("Costo Totale (€)", 0.0)
+                    )
 
-                            idx = df_aggiornato[
-                                df_aggiornato["Targa Auto"] == targa_selezionata
-                            ].index
+                if st.button(
+                    "➕ Aggiungi Rientro e Modifica Stato", type="primary"
+                ):
+                    try:
+                        df_aggiornato = formatta_date_df(df)
 
-                            if len(idx) > 0:
-                                i = idx[0]
+                        # FIX BUG INDICE: Cerca la riga specificamente Noleggiata per quella targa
+                        idx = df_aggiornato[
+                            (df_aggiornato["Targa Auto"] == targa_selezionata)
+                            & (df_aggiornato["Stato"] == "Noleggiata")
+                        ].index
 
-                                # Modifica dello stato del noleggio e del veicolo
-                                df_aggiornato.loc[i, "Stato"] = nuovo_stato
-                                df_aggiornato.loc[i, "Data Fine"] = str(
-                                    data_rientro_effettiva
-                                )
-                                df_aggiornato.loc[i, "Giorni"] = int(
-                                    giorni_effettivi
-                                )
-                                df_aggiornato.loc[i, "Costo Totale (€)"] = (
-                                    float(costo_ricalcolato)
-                                )
+                        if len(idx) > 0:
+                            i = idx[0]
 
-                                note_esistenti = (
-                                    str(df_aggiornato.loc[i, "Note"])
-                                    if "Note" in df_aggiornato.columns
-                                    and pd.notna(df_aggiornato.loc[i, "Note"])
-                                    else ""
-                                )
-                                tag = (
-                                    f"[Rientro {data_rientro_effettiva}:"
-                                    f" {note_rientro}]"
-                                    if note_rientro
-                                    else f"[Rientro {data_rientro_effettiva}]"
-                                )
-                                df_aggiornato.loc[i, "Note"] = (
-                                    f"{note_esistenti} {tag}".strip()
-                                )
+                            df_aggiornato.loc[i, "Stato"] = nuovo_stato
+                            df_aggiornato.loc[i, "Data Fine"] = str(
+                                data_rientro_effettiva
+                            )
+                            df_aggiornato.loc[i, "Giorni"] = int(
+                                giorni_effettivi
+                            )
+                            df_aggiornato.loc[i, "Costo Totale (€)"] = float(
+                                costo_ricalcolato
+                            )
 
-                                payload = {
-                                    "action": "update_all",
-                                    "rows": df_aggiornato.fillna("").to_dict(
-                                        orient="records"
-                                    ),
-                                }
+                            note_esistenti = (
+                                str(df_aggiornato.loc[i, "Note"])
+                                if "Note" in df_aggiornato.columns
+                                and pd.notna(df_aggiornato.loc[i, "Note"])
+                                else ""
+                            )
+                            tag = (
+                                f"[Rientro {data_rientro_effettiva}:"
+                                f" {note_rientro}]"
+                                if note_rientro
+                                else f"[Rientro {data_rientro_effettiva}]"
+                            )
+                            df_aggiornato.loc[i, "Note"] = (
+                                f"{note_esistenti} {tag}".strip()
+                            )
 
-                                response = requests.post(
-                                    APPS_SCRIPT_URL, json=payload
+                            payload = {
+                                "action": "update_all",
+                                "rows": df_aggiornato.fillna("").to_dict(
+                                    orient="records"
+                                ),
+                            }
+
+                            response = requests.post(
+                                APPS_SCRIPT_URL, json=payload
+                            )
+                            if response.status_code == 200:
+                                st.success(
+                                    "✅ Rientro registrato con successo! Stato"
+                                    f" veicolo {targa_selezionata} modificato in"
+                                    f" '{nuovo_stato}'."
                                 )
-                                if response.status_code == 200:
-                                    st.success(
-                                        f"✅ Rientro registrato con successo!"
-                                        f" Stato veicolo {targa_selezionata}"
-                                        f" modificato in '{nuovo_stato}'."
-                                    )
-                                    st.cache_data.clear()
-                                    time.sleep(1)
-                                    st.rerun()
-                                else:
-                                    st.error(
-                                        "Errore durante il salvataggio:"
-                                        f" {response.status_code}"
-                                    )
-                        except Exception as e:
-                            st.error(f"Errore durante l'operazione: {e}")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(
+                                    "Errore durante il salvataggio:"
+                                    f" {response.status_code}"
+                                )
+                    except Exception as e:
+                        st.error(f"Errore durante l'operazione: {e}")
     else:
         st.info("Nessun dato disponibile.")
 
@@ -407,28 +420,41 @@ with tab_storico:
 
         with f2:
             stati_disponibili = (
-                ["Tutti"] + list(df["Stato"].unique())
+                ["Tutti"] + list(df["Stato"].dropna().unique())
                 if "Stato" in df.columns
                 else ["Tutti"]
             )
-            stato_selezionato = st.selectbox("Filtra per Stato", stati_disponibili)
+            stato_selezionato = st.selectbox(
+                "Filtra per Stato", stati_disponibili
+            )
 
         with f3:
             range_date = st.date_input(
                 "Intervallo Data Inizio",
                 value=(),
-                help="Seleziona la data di inizio e di fine per filtrare lo storico",
+                help=(
+                    "Seleziona la data di inizio e di fine per filtrare lo"
+                    " storico"
+                ),
             )
 
         df_filtrato = df.copy()
 
         if testo_ricerca:
-            mask_targa = df_filtrato["Targa Auto"].astype(str).str.contains(
-                testo_ricerca, case=False, na=False
-            ) if "Targa Auto" in df_filtrato.columns else False
-            mask_cliente = df_filtrato["Cliente"].astype(str).str.contains(
-                testo_ricerca, case=False, na=False
-            ) if "Cliente" in df_filtrato.columns else False
+            mask_targa = (
+                df_filtrato["Targa Auto"]
+                .astype(str)
+                .str.contains(testo_ricerca, case=False, na=False)
+                if "Targa Auto" in df_filtrato.columns
+                else False
+            )
+            mask_cliente = (
+                df_filtrato["Cliente"]
+                .astype(str)
+                .str.contains(testo_ricerca, case=False, na=False)
+                if "Cliente" in df_filtrato.columns
+                else False
+            )
             df_filtrato = df_filtrato[mask_targa | mask_cliente]
 
         if stato_selezionato != "Tutti" and "Stato" in df_filtrato.columns:
@@ -459,13 +485,11 @@ with tab_storico:
 
         rf1, rf2 = st.columns(2)
         rf1.info(f"💰 **Incasso Totale Filtrato:** € {c_incasso:,.2f}")
-        rf2.info(f"📅 **Giorni Noleggio Totali Filtrati:** {int(c_giorni)} giorni")
+        rf2.info(
+            f"📅 **Giorni Noleggio Totali Filtrati:** {int(c_giorni)} giorni"
+        )
 
-        df_display = df_filtrato.copy()
-        for c in ["Data Inizio", "Data Fine"]:
-            if c in df_display.columns:
-                df_display[c] = df_display[c].dt.strftime("%Y-%m-%d").fillna("")
-
+        df_display = formatta_date_df(df_filtrato)
         st.dataframe(df_display, use_container_width=True, hide_index=True)
 
         csv_data = df_display.to_csv(index=False).encode("utf-8")
@@ -524,14 +548,10 @@ with tab_registro:
                 " apportare cambiamenti alla tabella."
             )
 
-            df_reg_disp = df_reg.copy()
-            for c in ["Data Inizio", "Data Fine"]:
-                if c in df_reg_disp.columns:
-                    df_reg_disp[c] = (
-                        df_reg_disp[c].dt.strftime("%Y-%m-%d").fillna("")
-                    )
-
-            st.dataframe(df_reg_disp, use_container_width=True, hide_index=True)
+            df_reg_disp = formatta_date_df(df_reg)
+            st.dataframe(
+                df_reg_disp, use_container_width=True, hide_index=True
+            )
 
         else:
             col_btn1, col_btn2, _ = st.columns([2, 2, 4])
@@ -549,12 +569,7 @@ with tab_registro:
                 " modifica i dati direttamente nella tabella."
             )
 
-            df_editabile = df.copy()
-            for c in ["Data Inizio", "Data Fine"]:
-                if c in df_editabile.columns:
-                    df_editabile[c] = (
-                        df_editabile[c].dt.strftime("%Y-%m-%d").fillna("")
-                    )
+            df_editabile = formatta_date_df(df)
 
             if "Elimina" not in df_editabile.columns:
                 df_editabile.insert(0, "Elimina", False)
@@ -574,9 +589,9 @@ with tab_registro:
 
             if tasto_salva:
                 try:
-                    df_final = edited_df[edited_df["Elimina"] == False].drop(
-                        columns=["Elimina"]
-                    )
+                    df_final = edited_df[
+                        edited_df["Elimina"] == False
+                    ].drop(columns=["Elimina"])
                     df_pulito = df_final.fillna("")
 
                     payload = {
@@ -671,7 +686,9 @@ with tab_nuovo:
                     "Data Inizio": (
                         str(data_inizio) if stato == "Noleggiata" else ""
                     ),
-                    "Data Fine": str(data_fine) if stato == "Noleggiata" else "",
+                    "Data Fine": (
+                        str(data_fine) if stato == "Noleggiata" else ""
+                    ),
                     "Giorni": giorni if stato == "Noleggiata" else 0,
                     "Costo Totale (€)": costo_totale,
                     "Note": note,
