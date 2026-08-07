@@ -266,6 +266,9 @@ with tab_storico:
 # =========================================================
 # TAB 4: REGISTRO FLOTTA (EDITABILE)
 # =========================================================
+# =========================================================
+# TAB 4: REGISTRO FLOTTA (EDITABILE E SOVRASCRIVIBILE)
+# =========================================================
 with tab_registro:
     st.subheader("📋 Registro Completo Flotta")
 
@@ -278,32 +281,62 @@ with tab_registro:
                 st.session_state.edit_mode = True
                 st.rerun()
 
-            st.dataframe(formatta_date_df(df), use_container_width=True, hide_index=True)
+            st.dataframe(
+                formatta_date_df(df),
+                use_container_width=True,
+                hide_index=True,
+            )
         else:
-            b1, b2 = st.columns([2, 8])
-            if b1.button("💾 Salva Modifiche", type="primary"):
-                df_salva = st.session_state.edited_df.fillna("")
-                payload = {
-                    "action": "update_all",
-                    "rows": df_salva.to_dict(orient="records"),
-                }
+            st.info(
+                "💡 **Istruzioni:** Modifica i dati direttamente nelle celle"
+                " della tabella sottostante, poi clicca su **💾 Salva Modifiche"
+                " su Google Sheets**."
+            )
+
+            # 1. L'EDITOR VIENE ESEGUITO PRIMA DEI PULSANTI
+            edited_df = st.data_editor(
+                formatta_date_df(df),
+                use_container_width=True,
+                hide_index=True,
+                key="editor_parco_auto",
+                num_rows="dynamic",  # Permette anche di aggiungere o eliminare righe
+            )
+
+            st.divider()
+            b1, b2 = st.columns([3, 7])
+
+            # 2. IL PULSANTE DI SALVATAGGIO LEGGE EDITED_DF GIÀ AGGIORNATO
+            if b1.button("💾 Salva Modifiche su Google Sheets", type="primary"):
                 try:
+                    df_salva = edited_df.fillna("")
+                    payload = {
+                        "action": "update_all",
+                        "rows": df_salva.to_dict(orient="records"),
+                    }
+
                     res = requests.post(APPS_SCRIPT_URL, json=payload)
                     if res.status_code == 200:
-                        st.success("✅ Tabella aggiornata con successo!")
+                        st.success(
+                            "✅ Foglio Google sovrascritto e aggiornato con"
+                            " successo!"
+                        )
                         st.session_state.edit_mode = False
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
+                    else:
+                        st.error(
+                            "Errore durante il salvataggio sul server:"
+                            f" {res.status_code}"
+                        )
                 except Exception as e:
-                    st.error(f"Errore connessione: {e}")
+                    st.error(f"Errore di connessione: {e}")
 
             if b2.button("❌ Annulla"):
                 st.session_state.edit_mode = False
                 st.rerun()
-
-            st.session_state.edited_df = st.data_editor(
-                formatta_date_df(df), use_container_width=True, hide_index=True
+    else:
+        st.warning("Nessun dato disponibile nel Registro.")
             )
 
 # =========================================================
