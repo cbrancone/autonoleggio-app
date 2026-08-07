@@ -119,7 +119,6 @@ with tab_dash:
         incasso_tot = df[COL_COSTO].sum() if COL_COSTO in df.columns else 0.0
         prezzo_medio = df[COL_PREZZO].mean() if COL_PREZZO in df.columns else 0.0
 
-        # Controllo noleggi scaduti
         noleggi_attivi = df[df[COL_STATO] == "Noleggiata"].copy() if COL_STATO in df.columns else pd.DataFrame()
         scaduti = 0
         if not noleggi_attivi.empty and COL_DATA_FIN in noleggi_attivi.columns:
@@ -127,14 +126,12 @@ with tab_dash:
             noleggi_attivi["_df_fine"] = pd.to_datetime(noleggi_attivi[COL_DATA_FIN], errors="coerce")
             scaduti = len(noleggi_attivi[noleggi_attivi["_df_fine"] < oggi])
 
-        # METRICHE - RIGA 1: STATO FLOTTA
         k1, k2, k3, k4 = st.columns(4)
         k1.metric("Totale Flotta", tot_veicoli)
         k2.metric("🟢 Disponibili", disponibili)
         k3.metric("🔴 In Noleggio", noleggiati)
         k4.metric("🟠 In Manutenzione", manutenzione)
 
-        # METRICHE - RIGA 2: PRESTAZIONI FINANZIARIE
         f1, f2, f3, f4 = st.columns(4)
         f1.metric("Incasso Totale Registrato", f"€ {incasso_tot:,.2f}")
         f2.metric("Prezzo Medio Giornaliero", f"€ {prezzo_medio:,.2f}")
@@ -148,7 +145,6 @@ with tab_dash:
 
         st.divider()
 
-        # GRAFICI
         cg1, cg2 = st.columns(2)
         with cg1:
             st.markdown("### 📊 Ripartizione Stato Veicoli")
@@ -234,7 +230,6 @@ with tab_rientro:
                         placeholder="Indicare eventuali graffi, stato di pulizia o note sul veicolo...",
                     )
 
-                # Calcolo dinamico dei giorni e del costo totale
                 if pd.notna(d_ini):
                     d_ini_date = d_ini.date() if isinstance(d_ini, pd.Timestamp) else d_ini
                     giorni_effettivi = (data_rientro - d_ini_date).days
@@ -258,7 +253,6 @@ with tab_rientro:
 
                         if len(idx) > 0:
                             i = idx[0]
-                            # Formattazione note check-in riassuntive
                             dettagli_checkin = f"Rientro il {data_rientro} | Carb: {carburante}"
                             if km_rientro:
                                 dettagli_checkin += f" | Km: {km_rientro}"
@@ -270,19 +264,24 @@ with tab_rientro:
                             df_agg.loc[i, COL_COSTO] = float(costo_ricalcolato)
                             df_agg.loc[i, COL_NOTE_CHECKIN] = dettagli_checkin
 
+                            # Convertiamo il dataframe pulito in dict garantendo il tipo stringa/numerico
+                            rows_payload = df_agg.fillna("").astype(str).to_dict(orient="records")
+
                             payload = {
                                 "action": "update_all",
-                                "rows": df_agg.fillna("").to_dict(orient="records"),
+                                "rows": rows_payload,
                             }
 
-                            res = requests.post(APPS_SCRIPT_URL, json=payload)
-                            if res.status_code == 200:
+                            res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
+                            res_json = res.json() if res.status_code == 200 else {}
+
+                            if res.status_code == 200 and res_json.get("status") == "ok":
                                 st.success(f"✅ Rientro per la targa {targa_selezionata} registrato con successo!")
                                 st.cache_data.clear()
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                st.error(f"Errore durante l'aggiornamento sul server: {res.status_code}")
+                                st.error(f"Errore risposta server: {res.text}")
                     except Exception as e:
                         st.error(f"Errore durante l'operazione di rientro: {e}")
 
@@ -338,12 +337,9 @@ with tab_registro:
             )
         else:
             st.info(
-                "💡 **Istruzioni:** Modifica i dati direttamente nelle celle"
-                " della tabella sottostante, poi clicca su **💾 Salva Modifiche"
-                " su Google Sheets**."
+                "💡 Modifica i dati nelle celle e fai clic su **💾 Salva Modifiche su Google Sheets**."
             )
 
-            # Editor posizionato PRIMA del pulsante di salvataggio
             edited_df = st.data_editor(
                 formatta_date_df(df),
                 use_container_width=True,
@@ -357,29 +353,26 @@ with tab_registro:
 
             if b1.button("💾 Salva Modifiche su Google Sheets", type="primary"):
                 try:
-                    df_salva = edited_df.fillna("")
+                    # Garantisce la pulizia completa dei dati inseriti
+                    df_salva = edited_df.fillna("").astype(str)
                     payload = {
                         "action": "update_all",
                         "rows": df_salva.to_dict(orient="records"),
                     }
 
-                    res = requests.post(APPS_SCRIPT_URL, json=payload)
-                    if res.status_code == 200:
-                        st.success(
-                            "✅ Foglio Google sovrascritto e aggiornato con"
-                            " successo!"
-                        )
+                    res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
+                    res_json = res.json() if res.status_code == 200 else {}
+
+                    if res.status_code == 200 and res_json.get("status") == "ok":
+                        st.success("✅ Foglio Google aggiornato con successo!")
                         st.session_state.edit_mode = False
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error(
-                            "Errore durante il salvataggio sul server:"
-                            f" {res.status_code}"
-                        )
+                        st.error(f"Errore durante il salvataggio: {res.text}")
                 except Exception as e:
-                    st.error(f"Errore di connessione: {e}")
+                    st.error(f"Errore di connessione con Apps Script: {e}")
 
             if b2.button("❌ Annulla"):
                 st.session_state.edit_mode = False
@@ -433,30 +426,32 @@ with tab_nuovo:
             else:
                 payload = {
                     "action": "append",
-                    COL_TARGA: targa,
-                    COL_MARCA: marca,
-                    COL_MODELLO: modello,
-                    COL_CATEGORIA: categoria,
-                    COL_PREZZO: prezzo_giornaliero,
-                    COL_ANNO: int(anno_imm),
-                    COL_CLIENTE: cliente if cliente else "N/D",
-                    COL_STATO: stato,
+                    COL_TARGA: str(targa),
+                    COL_MARCA: str(marca),
+                    COL_MODELLO: str(modello),
+                    COL_CATEGORIA: str(categoria),
+                    COL_PREZZO: str(prezzo_giornaliero),
+                    COL_ANNO: str(int(anno_imm)),
+                    COL_CLIENTE: str(cliente) if cliente else "N/D",
+                    COL_STATO: str(stato),
                     COL_DATA_INI: str(data_inizio) if stato == "Noleggiata" else "",
                     COL_DATA_FIN: str(data_fine) if stato == "Noleggiata" else "",
-                    COL_NOTE: note,
-                    COL_COSTO: costo_totale,
-                    COL_NOTE1: note1,
-                    COL_NOTE_CHECKIN: note_checkin,
+                    COL_NOTE: str(note),
+                    COL_COSTO: str(costo_totale),
+                    COL_NOTE1: str(note1),
+                    COL_NOTE_CHECKIN: str(note_checkin),
                 }
 
                 try:
-                    res = requests.post(APPS_SCRIPT_URL, json=payload)
-                    if res.status_code == 200:
+                    res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
+                    res_json = res.json() if res.status_code == 200 else {}
+
+                    if res.status_code == 200 and res_json.get("status") == "ok":
                         st.success(f"✅ Registrazione per {targa} salvata correttamente!")
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
                     else:
-                        st.error(f"Errore risposta server: {res.status_code}")
+                        st.error(f"Errore risposta server: {res.text}")
                 except Exception as e:
                     st.error(f"Errore di connessione: {e}")
