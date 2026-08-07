@@ -185,13 +185,12 @@ with tab_dash:
         st.info("Nessun dato disponibile nel Foglio Google.")
 
 # =========================================================
-# TAB 2: RIENTRO VEICOLO (CHECK-IN)
+# TAB 2: RIENTRO VEICOLO (CHECK-IN E MODIFICA STATO)
 # =========================================================
 with tab_rientro:
     st.subheader("🔑 Check-in e Rientro Veicolo")
 
     if not df.empty and "Stato" in df.columns:
-        # Filtra solo le auto in stato 'Noleggiata'
         df_noleggiate = df[df["Stato"] == "Noleggiata"]
 
         if df_noleggiate.empty:
@@ -200,7 +199,6 @@ with tab_rientro:
                 " disponibile o in manutenzione."
             )
         else:
-            # Lista per la selectbox
             auto_opzioni = df_noleggiate.apply(
                 lambda r: (
                     f"{r.get('Targa Auto', '')} - {r.get('Marca', '')}"
@@ -222,7 +220,7 @@ with tab_rientro:
 
                 st.divider()
 
-                # Card Informativa Noleggio
+                # Card Informativa Noleggio Attivo
                 st.markdown("### 📄 Dettagli Noleggio Attivo")
                 c1, c2, c3 = st.columns(3)
 
@@ -232,31 +230,35 @@ with tab_rientro:
                     f" {veicolo.get('Marca', '')} {veicolo.get('Modello', '')}"
                 )
 
-                d_ini = (
-                    veicolo["Data Inizio"].strftime("%Y-%m-%d")
-                    if pd.notna(veicolo.get("Data Inizio"))
+                d_ini_val = veicolo.get("Data Inizio")
+                d_fin_val = veicolo.get("Data Fine")
+
+                d_ini_str = (
+                    d_ini_val.strftime("%Y-%m-%d")
+                    if pd.notna(d_ini_val)
                     else "N/D"
                 )
-                d_fin = (
-                    veicolo["Data Fine"].strftime("%Y-%m-%d")
-                    if pd.notna(veicolo.get("Data Fine"))
+                d_fin_str = (
+                    d_fin_val.strftime("%Y-%m-%d")
+                    if pd.notna(d_fin_val)
                     else "N/D"
+                )
+
+                prezzo_giornaliero = float(
+                    veicolo.get("Prezzo Giornaliero", 0.0) or 0.0
                 )
 
                 c2.markdown(f"**Cliente:** {veicolo.get('Cliente', 'N/D')}")
-                c2.markdown(f"**Data Inizio Prevista:** {d_ini}")
+                c2.markdown(f"**Data Inizio Noleggio:** {d_ini_str}")
 
-                c3.markdown(
-                    "**Costo Totale:** €"
-                    f" {veicolo.get('Costo Totale (€)', 0):.2f}"
-                )
-                c3.markdown(f"**Data Fine Prevista:** {d_fin}")
+                c3.markdown(f"**Prezzo Giornaliero:** € {prezzo_giornaliero:.2f}")
+                c3.markdown(f"**Data Fine Prevista:** {d_fin_str}")
 
                 st.divider()
 
-                # Form per il Rientro
+                # Form per il Rientro del Veicolo
                 with st.form("form_rientro"):
-                    st.markdown("### 📝 Registra Rientro")
+                    st.markdown("### 📝 Dati di Check-in")
 
                     r_col1, r_col2 = st.columns(2)
                     with r_col1:
@@ -265,32 +267,60 @@ with tab_rientro:
                             ["Disponibile", "In Manutenzione"],
                             help=(
                                 "Seleziona 'In Manutenzione' se il veicolo"
-                                " necessita di pulizia straordinaria o"
-                                " riparazioni."
+                                " necessita di manutenzione o pulizia."
                             ),
                         )
-                        data_rientro = st.date_input(
-                            "Data Rientro Effettiva", date.today()
+                        data_rientro_effettiva = st.date_input(
+                            "Data Rientro Effettiva *", date.today()
                         )
 
                     with r_col2:
                         note_rientro = st.text_area(
-                            "Note Check-in (Carburante, Danni, Pulizia)",
-                            help=(
-                                "Le note verranno salvate ed allegate al"
-                                " registro dello storico."
+                            "Note Check-in",
+                            placeholder=(
+                                "Es: Carburante Ok, chilometraggio finale,"
+                                " eventuali danni riscontrati."
                             ),
                         )
 
-                    btn_rientro = st.form_submit_button(
-                        "✅ Conferma Rientro Veicolo", type="primary"
+                    # Ricalcolo dei Giorni ed dell'Incasso in base alla data effettiva
+                    if pd.notna(d_ini_val):
+                        d_ini_date = (
+                            d_ini_val.date()
+                            if isinstance(d_ini_val, pd.Timestamp)
+                            else d_ini_val
+                        )
+                        giorni_effettivi = (
+                            data_rientro_effettiva - d_ini_date
+                        ).days
+                        giorni_effettivi = (
+                            1 if giorni_effettivi < 1 else giorni_effettivi
+                        )
+                        costo_ricalcolato = (
+                            giorni_effettivi * prezzo_giornaliero
+                        )
+                        st.info(
+                            "📐 **Ricalcolo Noleggio:**"
+                            f" {giorni_effettivi} giorni effettivi ×"
+                            f" €{prezzo_giornaliero:.2f}/gg = **€"
+                            f" {costo_ricalcolato:.2f}**"
+                        )
+                    else:
+                        giorni_effettivi = int(veicolo.get("Giorni", 1))
+                        costo_ricalcolato = float(
+                            veicolo.get("Costo Totale (€)", 0.0)
+                        )
+
+                    # Tasto esplicito per inviare e salvare la modifica dello stato
+                    btn_aggiungi_rientro = st.form_submit_button(
+                        "➕ Aggiungi Rientro e Modifica Stato", type="primary"
                     )
 
-                    if btn_rientro:
+                    if btn_aggiungi_rientro:
                         try:
                             df_aggiornato = df.copy()
 
-                            # Formattazione stringa date per l'export JSON
+                            # Formattazione stringhe date per l'esportazione
                             for c in ["Data Inizio", "Data Fine"]:
                                 if c in df_aggiornato.columns:
                                     df_aggiornato[c] = (
@@ -305,22 +335,33 @@ with tab_rientro:
 
                             if len(idx) > 0:
                                 i = idx[0]
-                                df_aggiornato.loc[i, "Stato"] = nuovo_stato
 
-                                # Append delle note di rientro
+                                # Modifica dello stato del noleggio e del veicolo
+                                df_aggiornato.loc[i, "Stato"] = nuovo_stato
+                                df_aggiornato.loc[i, "Data Fine"] = str(
+                                    data_rientro_effettiva
+                                )
+                                df_aggiornato.loc[i, "Giorni"] = int(
+                                    giorni_effettivi
+                                )
+                                df_aggiornato.loc[i, "Costo Totale (€)"] = (
+                                    float(costo_ricalcolato)
+                                )
+
                                 note_esistenti = (
                                     str(df_aggiornato.loc[i, "Note"])
                                     if "Note" in df_aggiornato.columns
                                     and pd.notna(df_aggiornato.loc[i, "Note"])
                                     else ""
                                 )
-                                tag_rientro = (
-                                    f"[Rientro {data_rientro}: {note_rientro}]"
+                                tag = (
+                                    f"[Rientro {data_rientro_effettiva}:"
+                                    f" {note_rientro}]"
                                     if note_rientro
-                                    else f"[Rientro {data_rientro}]"
+                                    else f"[Rientro {data_rientro_effettiva}]"
                                 )
                                 df_aggiornato.loc[i, "Note"] = (
-                                    f"{note_esistenti} {tag_rientro}".strip()
+                                    f"{note_esistenti} {tag}".strip()
                                 )
 
                                 payload = {
@@ -335,9 +376,9 @@ with tab_rientro:
                                 )
                                 if response.status_code == 200:
                                     st.success(
-                                        f"🔑 Veicolo {targa_selezionata}"
-                                        " rientrato con successo! Stato"
-                                        f" aggiornato a '{nuovo_stato}'."
+                                        f"✅ Rientro registrato con successo!"
+                                        f" Stato veicolo {targa_selezionata}"
+                                        f" modificato in '{nuovo_stato}'."
                                     )
                                     st.cache_data.clear()
                                     time.sleep(1)
