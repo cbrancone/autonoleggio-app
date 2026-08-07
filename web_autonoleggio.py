@@ -111,30 +111,70 @@ with tab_dash:
 
     if not df.empty:
         tot_veicoli = len(df)
-        noleggiati = (
-            len(df[df[COL_STATO] == "Noleggiata"]) if COL_STATO in df.columns else 0
-        )
+        noleggiati = len(df[df[COL_STATO] == "Noleggiata"]) if COL_STATO in df.columns else 0
+        disponibili = len(df[df[COL_STATO] == "Disponibile"]) if COL_STATO in df.columns else 0
+        manutenzione = len(df[df[COL_STATO] == "In Manutenzione"]) if COL_STATO in df.columns else 0
+
         tasso_occ = (noleggiati / tot_veicoli * 100) if tot_veicoli > 0 else 0
         incasso_tot = df[COL_COSTO].sum() if COL_COSTO in df.columns else 0.0
+        prezzo_medio = df[COL_PREZZO].mean() if COL_PREZZO in df.columns else 0.0
 
+        # Controllo noleggi scaduti
+        noleggi_attivi = df[df[COL_STATO] == "Noleggiata"].copy() if COL_STATO in df.columns else pd.DataFrame()
+        scaduti = 0
+        if not noleggi_attivi.empty and COL_DATA_FIN in noleggi_attivi.columns:
+            oggi = pd.to_datetime(date.today())
+            noleggi_attivi["_df_fine"] = pd.to_datetime(noleggi_attivi[COL_DATA_FIN], errors="coerce")
+            scaduti = len(noleggi_attivi[noleggi_attivi["_df_fine"] < oggi])
+
+        # METRICHE - RIGA 1: STATO FLOTTA
         k1, k2, k3, k4 = st.columns(4)
-        k1.metric("Totale Veicoli", tot_veicoli)
-        k2.metric("Veicoli Noleggiati", noleggiati)
-        k3.metric("Tasso Occupazione", f"{tasso_occ:.1f}%")
-        k4.metric("Incasso Registrato", f"€ {incasso_tot:,.2f}")
+        k1.metric("Totale Flotta", tot_veicoli)
+        k2.metric("🟢 Disponibili", disponibili)
+        k3.metric("🔴 In Noleggio", noleggiati)
+        k4.metric("🟠 In Manutenzione", manutenzione)
+
+        # METRICHE - RIGA 2: PRESTAZIONI FINANZIARIE
+        f1, f2, f3, f4 = st.columns(4)
+        f1.metric("Incasso Totale Registrato", f"€ {incasso_tot:,.2f}")
+        f2.metric("Prezzo Medio Giornaliero", f"€ {prezzo_medio:,.2f}")
+        f3.metric("Tasso di Occupazione", f"{tasso_occ:.1f}%")
+        f4.metric(
+            "⚠️ Noleggi Scaduti", 
+            scaduti, 
+            delta="- Attenzione" if scaduti > 0 else "Tutto OK", 
+            delta_color="inverse" if scaduti > 0 else "normal"
+        )
 
         st.divider()
-        cg1, cg2 = st.columns(2)
 
+        # GRAFICI
+        cg1, cg2 = st.columns(2)
         with cg1:
-            st.write("📊 **Stato Veicoli Attuale**")
+            st.markdown("### 📊 Ripartizione Stato Veicoli")
             if COL_STATO in df.columns:
                 st.bar_chart(df[COL_STATO].value_counts())
 
         with cg2:
-            st.write("🏷️ **Incassi per Categoria**")
+            st.markdown("### 🚗 Veicoli per Categoria")
+            if COL_CATEGORIA in df.columns:
+                st.bar_chart(df[COL_CATEGORIA].value_counts())
+
+        st.divider()
+
+        cg3, cg4 = st.columns(2)
+        with cg3:
+            st.markdown("### 💰 Incassi per Categoria (€)")
             if COL_CATEGORIA in df.columns and COL_COSTO in df.columns:
                 st.bar_chart(df.groupby(COL_CATEGORIA)[COL_COSTO].sum())
+
+        with cg4:
+            st.markdown("### 🔑 Noleggi Attivi in Corso")
+            if not noleggi_attivi.empty:
+                cols_view = [c for c in [COL_TARGA, COL_MARCA, COL_MODELLO, COL_CLIENTE, COL_DATA_FIN] if c in noleggi_attivi.columns]
+                st.dataframe(noleggi_attivi[cols_view], use_container_width=True, hide_index=True)
+            else:
+                st.info("Nessun noleggio attualmente in corso.")
     else:
         st.info("Nessun dato caricato dal Foglio Google.")
 
@@ -142,7 +182,7 @@ with tab_dash:
 # TAB 2: RIENTRO VEICOLO
 # =========================================================
 with tab_rientro:
-    st.subheader("🔑 Check-in e Rientro Veicolo")
+    st.subheader("🔑 Check-in e Registrazione Rientro Veicolo")
 
     if not df.empty and COL_STATO in df.columns:
         df_noleggiate = df[df[COL_STATO] == "Noleggiata"]
@@ -155,7 +195,7 @@ with tab_rientro:
                 axis=1,
             ).tolist()
 
-            veicolo_sel = st.selectbox("Seleziona veicolo da far rientrare:", opzioni)
+            veicolo_sel = st.selectbox("Seleziona il veicolo da far rientrare *", opzioni)
 
             if veicolo_sel:
                 targa_selezionata = veicolo_sel.split(" - ")[0]
@@ -166,29 +206,35 @@ with tab_rientro:
                 prezzo_giornaliero = float(row_veicolo.get(COL_PREZZO, 0.0) or 0.0)
 
                 st.divider()
-                st.markdown("### 📄 Scheda Noleggio Attivo")
+                st.markdown("### 📄 Dettagli Noleggio Attivo")
                 c1, c2 = st.columns(2)
                 c1.markdown(f"**Targa:** `{targa_selezionata}` | **Veicolo:** {row_veicolo.get(COL_MARCA, '')} {row_veicolo.get(COL_MODELLO, '')}")
                 c1.markdown(f"**Cliente:** {row_veicolo.get(COL_CLIENTE, 'N/D')}")
-                c2.markdown(f"**Data Inizio:** {d_ini_str}")
+                c2.markdown(f"**Data Inizio Noleggio:** {d_ini_str}")
                 c2.markdown(f"**Prezzo Giornaliero:** € {prezzo_giornaliero:.2f}")
 
                 st.divider()
+                st.markdown("### 📋 Form Check-in Rientro")
                 r_col1, r_col2 = st.columns(2)
 
                 with r_col1:
+                    data_rientro = st.date_input("Data Rientro Effettiva *", date.today())
                     nuovo_stato = st.selectbox(
                         "Nuovo Stato Veicolo *", ["Disponibile", "In Manutenzione"]
                     )
-                    data_rientro = st.date_input("Data Rientro Effettiva *", date.today())
+                    km_rientro = st.text_input("Chilometri al rientro", placeholder="es. 45.200 km")
 
                 with r_col2:
-                    note_checkin = st.text_area(
-                        "Note Check In",
-                        placeholder="Incolumità veicolo, km finali, livello carburante...",
+                    carburante = st.selectbox(
+                        "Livello Carburante/Ricarica",
+                        ["Pieno", "3/4", "1/2", "1/4", "Riserva"]
+                    )
+                    note_danni = st.text_area(
+                        "Note Check In / Eventuali Danni",
+                        placeholder="Indicare eventuali graffi, stato di pulizia o note sul veicolo...",
                     )
 
-                # Calcolo dinamico dei giorni e del costo
+                # Calcolo dinamico dei giorni e del costo totale
                 if pd.notna(d_ini):
                     d_ini_date = d_ini.date() if isinstance(d_ini, pd.Timestamp) else d_ini
                     giorni_effettivi = (data_rientro - d_ini_date).days
@@ -198,10 +244,10 @@ with tab_rientro:
 
                 costo_ricalcolato = giorni_effettivi * prezzo_giornaliero
                 st.info(
-                    f"📐 **Calcolo Noleggio:** {giorni_effettivi} giorni × €{prezzo_giornaliero:.2f}/gg = **€ {costo_ricalcolato:.2f}**"
+                    f"📐 **Riepilogo Conteggio:** {giorni_effettivi} giorni di noleggio × €{prezzo_giornaliero:.2f}/gg = **Costo Totale: € {costo_ricalcolato:.2f}**"
                 )
 
-                if st.button("➕ Registra Rientro e Aggiorna Foglio", type="primary"):
+                if st.button("➕ Registra Rientro e Aggiorna Foglio Google", type="primary"):
                     try:
                         df_agg = formatta_date_df(df)
 
@@ -212,10 +258,17 @@ with tab_rientro:
 
                         if len(idx) > 0:
                             i = idx[0]
+                            # Formattazione note check-in riassuntive
+                            dettagli_checkin = f"Rientro il {data_rientro} | Carb: {carburante}"
+                            if km_rientro:
+                                dettagli_checkin += f" | Km: {km_rientro}"
+                            if note_danni.strip():
+                                dettagli_checkin += f" | Note: {note_danni.strip()}"
+
                             df_agg.loc[i, COL_STATO] = nuovo_stato
                             df_agg.loc[i, COL_DATA_FIN] = str(data_rientro)
                             df_agg.loc[i, COL_COSTO] = float(costo_ricalcolato)
-                            df_agg.loc[i, COL_NOTE_CHECKIN] = note_checkin.strip()
+                            df_agg.loc[i, COL_NOTE_CHECKIN] = dettagli_checkin
 
                             payload = {
                                 "action": "update_all",
@@ -224,14 +277,14 @@ with tab_rientro:
 
                             res = requests.post(APPS_SCRIPT_URL, json=payload)
                             if res.status_code == 200:
-                                st.success(f"✅ Rientro per {targa_selezionata} completato con successo!")
+                                st.success(f"✅ Rientro per la targa {targa_selezionata} registrato con successo!")
                                 st.cache_data.clear()
                                 time.sleep(1)
                                 st.rerun()
                             else:
-                                st.error(f"Errore durante il salvataggio: {res.status_code}")
+                                st.error(f"Errore durante l'aggiornamento sul server: {res.status_code}")
                     except Exception as e:
-                        st.error(f"Errore operazione: {e}")
+                        st.error(f"Errore durante l'operazione di rientro: {e}")
 
 # =========================================================
 # TAB 3: STORICO & RICERCA
@@ -264,9 +317,6 @@ with tab_storico:
         st.download_button("📥 Scarica Dati (CSV)", csv, "storico_autonoleggio.csv", "text/csv")
 
 # =========================================================
-# TAB 4: REGISTRO FLOTTA (EDITABILE)
-# =========================================================
-# =========================================================
 # TAB 4: REGISTRO FLOTTA (EDITABILE E SOVRASCRIVIBILE)
 # =========================================================
 with tab_registro:
@@ -293,19 +343,18 @@ with tab_registro:
                 " su Google Sheets**."
             )
 
-            # 1. L'EDITOR VIENE ESEGUITO PRIMA DEI PULSANTI
+            # Editor posizionato PRIMA del pulsante di salvataggio
             edited_df = st.data_editor(
                 formatta_date_df(df),
                 use_container_width=True,
                 hide_index=True,
                 key="editor_parco_auto",
-                num_rows="dynamic",  # Permette anche di aggiungere o eliminare righe
+                num_rows="dynamic",
             )
 
             st.divider()
             b1, b2 = st.columns([3, 7])
 
-            # 2. IL PULSANTE DI SALVATAGGIO LEGGE EDITED_DF GIÀ AGGIORNATO
             if b1.button("💾 Salva Modifiche su Google Sheets", type="primary"):
                 try:
                     df_salva = edited_df.fillna("")
@@ -337,7 +386,6 @@ with tab_registro:
                 st.rerun()
     else:
         st.warning("Nessun dato disponibile nel Registro.")
-            )
 
 # =========================================================
 # TAB 5: INSERISCI REGISTRAZIONE
