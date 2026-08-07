@@ -8,7 +8,7 @@ from datetime import date
 # CONFIGURAZIONE URL
 # ---------------------------------------------------------
 SPREADSHEET_ID = "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE"
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbxJB0DUaTg18brOx0d_DXMzgYu1WqgPK7bfx3zFGmABkC-3zrC7MZenHr2NHmHTqBdo_A/exec"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbzIMY05XhfUpztNADq1KlBC3vJxxdOGWisOdJDyrDXR2c6ZWiAiphJkL3aNvjAoBhS0-Q/exec"
 
 # ---------------------------------------------------------
 # 1. Setup Pagina
