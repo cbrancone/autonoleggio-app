@@ -8,7 +8,7 @@ import streamlit as st
 # CONFIGURAZIONE URL E NOMI COLONNE
 # ---------------------------------------------------------
 SPREADSHEET_ID = st.secrets.get(
-    "SPREADSHEET_ID", "AKfycbxJzie8NvpaCl-cJSvQlhisXe1X6KEQbpQGWbHEy4_7hT7xgPrqrAXQaGgaooxHdZILIQ"
+    "SPREADSHEET_ID", "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE/edit?usp=sharing"
 )
 APPS_SCRIPT_URL = st.secrets.get(
     "APPS_SCRIPT_URL",
