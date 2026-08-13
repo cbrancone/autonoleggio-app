@@ -8,11 +8,11 @@ import streamlit as st
 # CONFIGURAZIONE URL E NOMI COLONNE
 # ---------------------------------------------------------
 SPREADSHEET_ID = st.secrets.get(
-    "SPREADSHEET_ID", "AKfycbxsbTzAX4BJvAFTp_XjFrqxCTtX4zdCtQTscaS9JzFnjAruHrtOU0zdqZYSVG0Eag222g"
+    "SPREADSHEET_ID", "AKfycby_wtJnJQfDr7THM4u2eM2THD7nZz-volCmnDGHBcpN02KWCE1u0NwYZJnJ8dnh7qzhFg"
 )
 APPS_SCRIPT_URL = st.secrets.get(
     "APPS_SCRIPT_URL",
-    "https://script.google.com/macros/s/AKfycbxJB0DUaTg18brOx0d_DXMzgYu1WqgPK7bfx3zFGmABkC-3zrC7MZenHr2NHmHTqBdo_A/exec",
+    "https://script.google.com/macros/s/AKfycby_wtJnJQfDr7THM4u2eM2THD7nZz-volCmnDGHBcpN02KWCE1u0NwYZJnJ8dnh7qzhFg/exec",
 )
 
 # Nomi colonne esatti dal Foglio Google
