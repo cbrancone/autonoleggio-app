@@ -334,7 +334,6 @@ with tab_registro:
                     st.session_state.edit_mode = True
                     st.rerun()
 
-            # Abilita la selezione delle righe (corretto con "multi-row")
             event = st.dataframe(
                 df_formattato,
                 use_container_width=True,
@@ -344,7 +343,6 @@ with tab_registro:
                 key="registro_dataframe",
             )
 
-            # Estrae gli indici delle righe selezionate
             selected_rows = event.selection.rows if event and hasattr(event, "selection") else []
 
             if selected_rows:
@@ -352,7 +350,6 @@ with tab_registro:
                 
                 if st.button("🗑️ Elimina Righe Selezionate", type="primary"):
                     try:
-                        # Rimuove le righe selezionate
                         df_rimasto = df.drop(index=selected_rows).reset_index(drop=True)
                         df_salva = formatta_date_df(df_rimasto).fillna("").astype(str)
 
@@ -364,7 +361,8 @@ with tab_registro:
                         res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
                         res_json = res.json() if res.status_code == 200 else {}
 
-                        if res.status_code == 200 and res_json.get("status") == "ok":
+                        # Accetta sia "ok" che "success" come risposte valide
+                        if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
                             st.success("✅ Righe eliminate e Google Sheets aggiornato!")
                             st.cache_data.clear()
                             time.sleep(1)
@@ -402,7 +400,8 @@ with tab_registro:
                     res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
                     res_json = res.json() if res.status_code == 200 else {}
 
-                    if res.status_code == 200 and res_json.get("status") == "ok":
+                    # Accetta sia "ok" che "success" come risposte valide
+                    if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
                         st.success("✅ Foglio Google aggiornato con successo!")
                         st.session_state.edit_mode = False
                         st.cache_data.clear()
