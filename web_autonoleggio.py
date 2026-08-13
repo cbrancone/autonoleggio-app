@@ -325,27 +325,67 @@ with tab_registro:
         st.session_state.edit_mode = False
 
     if not df.empty:
-        if not st.session_state.edit_mode:
-            if st.button("✏️ Abilita Modifica Tabella"):
-                st.session_state.edit_mode = True
-                st.rerun()
+        df_formattato = formatta_date_df(df)
 
-            st.dataframe(
-                formatta_date_df(df),
+        if not st.session_state.edit_mode:
+            col_actions, col_space = st.columns([3, 7])
+            with col_actions:
+                if st.button("✏️ Abilita Modifica Tabella"):
+                    st.session_state.edit_mode = True
+                    st.rerun()
+
+            # Abilita la selezione delle righe tramite la tabella
+            event = st.dataframe(
+                df_formattato,
                 use_container_width=True,
                 hide_index=True,
+                on_select="rerun",
+                selection_mode="multi_row",
+                key="registro_dataframe",
             )
+
+            # Estrae gli indici delle righe selezionate dall'utente
+            selected_rows = event.selection.rows if event and hasattr(event, "selection") else []
+
+            if selected_rows:
+                st.warning(f"⚠️ Hai selezionato **{len(selected_rows)}** riga/e da eliminare.")
+                
+                if st.button("🗑️ Elimina Righe Selezionate", type="primary"):
+                    try:
+                        # Rimuove le righe selezionate dal DataFrame originale
+                        df_rimasto = df.drop(index=selected_rows).reset_index(drop=True)
+                        df_salva = formatta_date_df(df_rimasto).fillna("").astype(str)
+
+                        payload = {
+                            "action": "update_all",
+                            "rows": df_salva.to_dict(orient="records"),
+                        }
+
+                        res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
+                        res_json = res.json() if res.status_code == 200 else {}
+
+                        if res.status_code == 200 and res_json.get("status") == "ok":
+                            st.success("✅ Righe eliminate e Google Sheets aggiornato!")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"Errore durante l'eliminazione: {res.text}")
+                    except Exception as e:
+                        st.error(f"Errore di connessione con Apps Script: {e}")
+
         else:
             st.info(
-                "💡 Modifica i dati nelle celle e fai clic su **💾 Salva Modifiche su Google Sheets**."
+                "💡 Modifica le celle oppure seleziona una riga e premi **Canc/Backspace** sulla tastiera per eliminarla. "
+                "Al termine, fai clic su **💾 Salva Modifiche**."
             )
 
             edited_df = st.data_editor(
-                formatta_date_df(df),
+                df_formattato,
                 use_container_width=True,
                 hide_index=True,
                 key="editor_parco_auto",
-                num_rows="dynamic",
+                num_rows="dynamic",  # Consente anche l'aggiunta e rimozione nativa di righe
             )
 
             st.divider()
