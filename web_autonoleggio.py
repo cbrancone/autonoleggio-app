@@ -12,7 +12,7 @@ SPREADSHEET_ID = st.secrets.get(
 )
 APPS_SCRIPT_URL = st.secrets.get(
     "APPS_SCRIPT_URL",
-    "https://script.google.com/macros/s/AKfycbxJzie8NvpaCl-cJSvQlhisXe1X6KEQbpQGWbHEy4_7hT7xgPrqrAXQaGgaooxHdZILIQ/exec",
+    "https://script.google.com/macros/s/AKfycbw3ekPzkSNSqlwqHcLazt6hucWfrarrFLDY5yuI7V2iLm5dB6r2G23zG2ewSm3TQ-8ebA/exec",
 )
 
 # Nomi colonne esatti dal Foglio Google
