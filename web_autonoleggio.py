@@ -328,41 +328,83 @@ with tab_registro:
         df_formattato = formatta_date_df(df)
 
         if not st.session_state.edit_mode:
-            # Vista standard in sola lettura
+            # Vista standard (Sola lettura)
+            if st.button("✏️ Abilita Modifica Tabella"):
+                st.session_state.edit_mode = True
+                st.rerun()
+
             st.dataframe(
                 df_formattato,
                 use_container_width=True,
                 hide_index=True,
             )
-            if st.button("✏️ Abilita Modifica Tabella"):
-                st.session_state.edit_mode = True
-                st.rerun()
 
         else:
-            # Modalità Modifica Abilitata: visualizza opzioni di selezione ed eliminazione
+            # Vista Modifica (Abilitata)
             st.info(
-                "💡 **Modalità Modifica Attiva:** Seleziona le righe con la casella a sinistra per eliminarle, "
-                "oppure modifica le celle direttamente. Al termine salva le modifiche."
+                "💡 **Modalità Modifica Attiva:** Modifica i dati nelle celle oppure seleziona le righe tramite "
+                "la casella a sinistra per eliminarle. Al termine fai clic su **💾 Salva Modifiche su Google Sheets**."
             )
 
-            # Tabella con selezione righe abilitata
-            event = st.dataframe(
+            # Editor interattivo con selezione righe abilitata
+            editor_response = st.data_editor(
                 df_formattato,
                 use_container_width=True,
                 hide_index=True,
+                key="editor_parco_auto",
+                num_rows="dynamic",
                 on_select="rerun",
                 selection_mode="multi-row",
-                key="registro_dataframe_edit",
             )
 
-            selected_rows = event.selection.rows if event and hasattr(event, "selection") else []
+            # Estrae gli indici delle righe eventualmente selezionate con la spunta
+            selected_rows = (
+                editor_response.selection.rows
+                if editor_response and hasattr(editor_response, "selection")
+                else []
+            )
 
             st.divider()
-            b1, b2, b3 = st.columns([4, 4, 2])
+            b1, b2, b3 = st.columns([4, 3, 3])
 
-            # Bottone Elimina (compare solo se ci sono righe selezionate)
+            # Bottone Salva Modifiche (Originale)
+            if b1.button("💾 Salva Modifiche su Google Sheets", type="primary"):
+                try:
+                    # Ottiene il dataframe modificato direttamente dallo stato dell'editor
+                    edited_df = st.session_state["editor_parco_auto"]
+                    
+                    # Se l'editor restituisce la struttura dict delle modifiche, ricostruiamo il df aggiornato
+                    if isinstance(edited_df, dict):
+                        edited_df = df_formattato.copy()
+                        # Applica le righe eliminate nell'editor
+                        deleted_idx = edited_df.get("deleted_rows", []) if isinstance(edited_df, dict) else []
+                        if deleted_idx:
+                            edited_df = edited_df.drop(index=deleted_idx).reset_index(drop=True)
+
+                    df_salva = editor_response.fillna("").astype(str) if isinstance(editor_response, pd.DataFrame) else edited_df.fillna("").astype(str)
+
+                    payload = {
+                        "action": "update_all",
+                        "rows": df_salva.to_dict(orient="records"),
+                    }
+
+                    res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
+                    res_json = res.json() if res.status_code == 200 else {}
+
+                    if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
+                        st.success("✅ Foglio Google aggiornato con successo!")
+                        st.session_state.edit_mode = False
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"Errore durante il salvataggio: {res.text}")
+                except Exception as e:
+                    st.error(f"Errore di connessione con Apps Script: {e}")
+
+            # Bottone Elimina (Visibile se ci sono righe selezionate)
             if selected_rows:
-                if b2.button(f"🗑️ Elimina ({len(selected_rows)}) Selezionate", type="primary"):
+                if b2.button(f"🗑️ Elimina ({len(selected_rows)}) Selezionate"):
                     try:
                         df_rimasto = df.drop(index=selected_rows).reset_index(drop=True)
                         df_salva = formatta_date_df(df_rimasto).fillna("").astype(str)
@@ -385,7 +427,8 @@ with tab_registro:
                     except Exception as e:
                         st.error(f"Errore di connessione con Apps Script: {e}")
 
-            if b3.button("❌ Chiudi Modifica"):
+            # Bottone Annulla
+            if b3.button("❌ Annulla"):
                 st.session_state.edit_mode = False
                 st.rerun()
     else:
