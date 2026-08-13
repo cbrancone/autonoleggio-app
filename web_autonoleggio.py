@@ -334,17 +334,17 @@ with tab_registro:
                     st.session_state.edit_mode = True
                     st.rerun()
 
-            # Abilita la selezione delle righe tramite la tabella
+            # Abilita la selezione delle righe (corretto con "multi-row")
             event = st.dataframe(
                 df_formattato,
                 use_container_width=True,
                 hide_index=True,
                 on_select="rerun",
-                selection_mode="multi_row",
+                selection_mode="multi-row",
                 key="registro_dataframe",
             )
 
-            # Estrae gli indici delle righe selezionate dall'utente
+            # Estrae gli indici delle righe selezionate
             selected_rows = event.selection.rows if event and hasattr(event, "selection") else []
 
             if selected_rows:
@@ -352,7 +352,7 @@ with tab_registro:
                 
                 if st.button("🗑️ Elimina Righe Selezionate", type="primary"):
                     try:
-                        # Rimuove le righe selezionate dal DataFrame originale
+                        # Rimuove le righe selezionate
                         df_rimasto = df.drop(index=selected_rows).reset_index(drop=True)
                         df_salva = formatta_date_df(df_rimasto).fillna("").astype(str)
 
@@ -385,7 +385,7 @@ with tab_registro:
                 use_container_width=True,
                 hide_index=True,
                 key="editor_parco_auto",
-                num_rows="dynamic",  # Consente anche l'aggiunta e rimozione nativa di righe
+                num_rows="dynamic",
             )
 
             st.divider()
@@ -393,7 +393,6 @@ with tab_registro:
 
             if b1.button("💾 Salva Modifiche su Google Sheets", type="primary"):
                 try:
-                    # Garantisce la pulizia completa dei dati inseriti
                     df_salva = edited_df.fillna("").astype(str)
                     payload = {
                         "action": "update_all",
