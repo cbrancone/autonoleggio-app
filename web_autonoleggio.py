@@ -347,10 +347,13 @@ with tab_rientro:
                                     f" | Note: {note_danni.strip()}"
                                 )
 
+                            df_agg[COL_NOTE_CHECKIN] = df_agg[COL_NOTE_CHECKIN].astype(str)
+
                             df_agg.loc[i, COL_STATO] = nuovo_stato
                             df_agg.loc[i, COL_DATA_FIN] = str(data_rientro)
                             df_agg.loc[i, COL_COSTO] = float(costo_ricalcolato)
                             df_agg.loc[i, COL_NOTE_CHECKIN] = dettagli_checkin
+                            
 
                             rows_payload = (
                                 df_agg.fillna("")
