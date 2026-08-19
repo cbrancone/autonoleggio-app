@@ -108,8 +108,7 @@ tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo_noleggio, tab_nuovo_
     "📜 Storico & Ricerca",
     "📋 Registro Flotta",
     "➕ Nuovo Noleggio",
-    "🚗 Inserisci Nuovo Veicolo",
-])
+    "🚗 Inserisci Nuovo Veicolo"
 ])
 
 # =========================================================
