@@ -101,12 +101,12 @@ df = carica_dati()
 # ---------------------------------------------------------
 # TAB
 # ---------------------------------------------------------
-tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo_noleggio, tab_nuovo_cliente = st.tabs([
+tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo_veicolo, tab_nuovo_cliente = st.tabs([
     "📊 Dashboard",
     "🔑 Rientro Veicolo",
     "📜 Storico & Ricerca",
     "📋 Registro Flotta",
-    "➕ Nuovo Noleggio",
+    "🚗 Nuovo veicolo da aggiungere",
     "👤 Inserisci Nuovo Cliente",
 ])
 # =========================================================
@@ -530,12 +530,12 @@ with tab_registro:
 # TAB 5: INSERISCI REGISTRAZIONE
 # =========================================================
 # =========================================================
-# TAB 5: NUOVO NOLEGGIO (SELEZIONE AUTO DISPONIBILE)
+# TAB 5: NUOVO VEICOLO DA AGGIUNGERE
 # =========================================================
-with tab_nuovo_noleggio:
-    st.subheader("➕ Registra Nuovo Veicolo / Noleggio")
+with tab_nuovo_veicolo:
+    st.subheader("🚗 Aggiungi un Nuovo Veicolo alla Flotta")
 
-    with st.form("form_nuovo", clear_on_submit=True):
+    with st.form("form_nuovo_veicolo", clear_on_submit=True):
         c1, c2 = st.columns(2)
 
         with c1:
@@ -554,7 +554,7 @@ with tab_nuovo_noleggio:
             )
 
         with c2:
-            cliente = st.text_input(COL_CLIENTE)
+            cliente = st.text_input(COL_CLIENTE, placeholder="Eventuale cliente iniziale")
             stato = st.selectbox(
                 f"{COL_STATO} *",
                 ["Disponibile", "Noleggiata", "In Manutenzione"],
@@ -574,9 +574,9 @@ with tab_nuovo_noleggio:
         if stato == "Noleggiata":
             st.info(f"📐 **Costo Totale Calcolato:** € {costo_totale:.2f}")
 
-        submit = st.form_submit_button("💾 Salva nel Foglio Google")
+        submit_veicolo = st.form_submit_button("💾 Salva Nuovo Veicolo nel Foglio", type="primary")
 
-        if submit:
+        if submit_veicolo:
             if not targa or not marca or not modello:
                 st.error("Compila i campi obbligatori: Targa, Marca e Modello.")
             else:
@@ -590,12 +590,8 @@ with tab_nuovo_noleggio:
                     COL_ANNO: str(int(anno_imm)),
                     COL_CLIENTE: str(cliente) if cliente else "N/D",
                     COL_STATO: str(stato),
-                    COL_DATA_INI: (
-                        str(data_inizio) if stato == "Noleggiata" else ""
-                    ),
-                    COL_DATA_FIN: (
-                        str(data_fine) if stato == "Noleggiata" else ""
-                    ),
+                    COL_DATA_INI: str(data_inizio) if stato == "Noleggiata" else "",
+                    COL_DATA_FIN: str(data_fine) if stato == "Noleggiata" else "",
                     COL_NOTE: str(note),
                     COL_COSTO: str(costo_totale),
                     COL_NOTE1: str(note1),
@@ -603,19 +599,11 @@ with tab_nuovo_noleggio:
                 }
 
                 try:
-                    res = requests.post(
-                        APPS_SCRIPT_URL, json=payload, timeout=15
-                    )
+                    res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
                     res_json = res.json() if res.status_code == 200 else {}
 
-                    if res.status_code == 200 and res_json.get("status") in [
-                        "ok",
-                        "success",
-                    ]:
-                        st.success(
-                            f"✅ Registrazione per {targa} salvata"
-                            " correttamente!"
-                        )
+                    if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
+                        st.success(f"✅ Veicolo con targa {targa} aggiunto con successo!")
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
