@@ -107,6 +107,7 @@ tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo = st.tabs([
     "🔑 Rientro Veicolo",
     "📜 Storico & Ricerca",
     "📋 Registro Flotta",
+    "➕ Nuovo Noleggio",
     "➕ Inserisci Registrazione",
 ])
 
@@ -617,6 +618,89 @@ with tab_nuovo:
                             f"✅ Registrazione per {targa} salvata"
                             " correttamente!"
                         )
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"Errore risposta server: {res.text}")
+                except Exception as e:
+                    st.error(f"Errore di connessione: {e}")
+
+# =========================================================
+# TAB 6: INSERISCI NUOVO VEICOLO IN FLOTTA
+# =========================================================
+with tab_nuovo_veicolo:
+    st.subheader("🚗 Aggiungi un Nuovo Veicolo al Parco Auto")
+
+    with st.form("form_nuovo_veicolo", clear_on_submit=True):
+        c1, c2 = st.columns(2)
+
+        with c1:
+            targa = st.text_input(f"{COL_TARGA} *").upper()
+            marca = st.text_input(f"{COL_MARCA} *")
+            modello = st.text_input(f"{COL_MODELLO} *")
+            categoria = st.selectbox(
+                COL_CATEGORIA,
+                ["Utilitaria", "Berlina", "SUV", "Station Wagon", "Furgone"],
+            )
+            prezzo_giornaliero = st.number_input(
+                f"{COL_PREZZO} *", min_value=0.0, value=50.0
+            )
+            anno_imm = st.number_input(
+                COL_ANNO, min_value=1990, max_value=2030, value=2023
+            )
+
+        with c2:
+            cliente = st.text_input(COL_CLIENTE, placeholder="Se noleggiato subito, inserisci cliente")
+            stato = st.selectbox(
+                f"{COL_STATO} *",
+                ["Disponibile", "Noleggiata", "In Manutenzione"],
+            )
+            data_inizio = st.date_input(COL_DATA_INI, date.today())
+            data_fine = st.date_input(COL_DATA_FIN, date.today())
+            note = st.text_area(COL_NOTE)
+            note1 = st.text_input(COL_NOTE1)
+            note_checkin = st.text_input(COL_NOTE_CHECKIN)
+
+        giorni = (data_fine - data_inizio).days
+        giorni = 1 if giorni < 1 else giorni
+        costo_totale = (
+            giorni * prezzo_giornaliero if stato == "Noleggiata" else 0.0
+        )
+
+        if stato == "Noleggiata":
+            st.info(f"📐 **Costo Totale Calcolato:** € {costo_totale:.2f}")
+
+        submit_veicolo = st.form_submit_button("💾 Salva Nuovo Veicolo nel Foglio", type="primary")
+
+        if submit_veicolo:
+            if not targa or not marca or not modello:
+                st.error("Compila i campi obbligatori: Targa, Marca e Modello.")
+            else:
+                payload = {
+                    "action": "append",
+                    COL_TARGA: str(targa),
+                    COL_MARCA: str(marca),
+                    COL_MODELLO: str(modello),
+                    COL_CATEGORIA: str(categoria),
+                    COL_PREZZO: str(prezzo_giornaliero),
+                    COL_ANNO: str(int(anno_imm)),
+                    COL_CLIENTE: str(cliente) if cliente else "N/D",
+                    COL_STATO: str(stato),
+                    COL_DATA_INI: str(data_inizio) if stato == "Noleggiata" else "",
+                    COL_DATA_FIN: str(data_fine) if stato == "Noleggiata" else "",
+                    COL_NOTE: str(note),
+                    COL_COSTO: str(costo_totale),
+                    COL_NOTE1: str(note1),
+                    COL_NOTE_CHECKIN: str(note_checkin),
+                }
+
+                try:
+                    res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
+                    res_json = res.json() if res.status_code == 200 else {}
+
+                    if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
+                        st.success(f"✅ Veicolo con targa {targa} aggiunto con successo alla flotta!")
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
