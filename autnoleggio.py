@@ -102,13 +102,14 @@ df = carica_dati()
 # ---------------------------------------------------------
 # TAB
 # ---------------------------------------------------------
-tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo = st.tabs([
+tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo_noleggio, tab_nuovo_veicolo = st.tabs([
     "📊 Dashboard",
     "🔑 Rientro Veicolo",
     "📜 Storico & Ricerca",
     "📋 Registro Flotta",
     "➕ Nuovo Noleggio",
-    "➕ Inserisci Registrazione",
+    "🚗 Inserisci Nuovo Veicolo",
+])
 ])
 
 # =========================================================
