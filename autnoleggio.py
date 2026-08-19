@@ -604,48 +604,50 @@ with tab_nuovo_veicolo:
 with tab_nuovo_cliente:
     st.subheader("👤 Registrazione Nuovo Cliente e Assegnazione Veicolo")
 
-    if not df.empty:
-        # Identifica dinamicamente le colonne per evitare errori di corrispondenza
-        col_targa_k = COL_TARGA if COL_TARGA in df.columns else df.columns[0]
-        col_marca_k = COL_MARCA if COL_MARCA in df.columns else df.columns[1]
-        col_modello_k = COL_MODELLO if COL_MODELLO in df.columns else df.columns[2]
-        col_stato_k = COL_STATO if COL_STATO in df.columns else "Stato"
-        col_prezzo_k = COL_PREZZO if COL_PREZZO in df.columns else "Prezzo"
-
+    if not df.empty and COL_STATO in df.columns:
         # Pulisce la colonna stato per filtrare le auto disponibili
         df_temp = df.copy()
-        if col_stato_k in df_temp.columns:
-            df_temp['stato_pulito'] = df_temp[col_stato_k].astype(str).str.strip().str.capitalize()
-            df_disponibili = df_temp[df_temp['stato_pulito'] == "Disponibile"]
-        else:
-            df_disponibili = pd.DataFrame()
+        df_temp['stato_pulito'] = df_temp[COL_STATO].astype(str).str.strip().str.capitalize()
+        df_disponibili = df_temp[df_temp['stato_pulito'] == "Disponibile"]
 
         if df_disponibili.empty:
             st.warning("⚠️ Al momento non ci sono veicoli con stato 'Disponibile' nel registro flotta.")
-            st.info(f"Stati attualmente presenti nel foglio: {list(df[col_stato_k].unique()) if col_stato_k in df.columns else 'Colonna non trovata'}")
+            st.info(f"Stati attualmente presenti nel foglio: {list(df[COL_STATO].unique())}")
         else:
-            # Crea opzioni dettagliate con targa, marca, modello, stato e prezzo prelevati dal registro
+            # Crea opzioni e mappa associando targa e prezzo base
             opzioni_auto = []
             mappa_auto = {}
             for idx, r in df_disponibili.iterrows():
-                t = str(r.get(col_targa_k, ''))
-                m = str(r.get(col_marca_k, ''))
-                mod = str(r.get(col_modello_k, ''))
-                p = r.get(col_prezzo_k, 0.0)
-                s = str(r.get(col_stato_k, 'Disponibile'))
+                t = str(r.get(COL_TARGA, ''))
+                m = str(r.get(COL_MARCA, ''))
+                mod = str(r.get(COL_MODELLO, ''))
+                p = r.get(COL_PREZZO, 0.0)
                 
-                label = f"{t} - {m} {mod} | Stato: {s} | Prezzo: €{p}/giorno"
+                label = f"{t} - {m} {mod} (Prezzo base: €{p}/giorno)"
                 opzioni_auto.append(label)
-                mappa_auto[label] = t
+                p_val = float(p) if pd.notna(p) and str(p) != '' else 50.0
+                mappa_auto[label] = (t, p_val)
 
             with st.form("form_nuovo_cliente", clear_on_submit=True):
                 c1, c2 = st.columns(2)
                 with c1:
                     nome_cliente = st.text_input("Nome e Cognome Cliente *", placeholder="es. Mario Rossi")
-                    auto_scelta_label = st.selectbox("Seleziona Veicolo dal Registro Flotta *", opzioni_auto)
+                    auto_scelta_label = st.selectbox("Seleziona Veicolo Disponibile *", opzioni_auto)
+                    
+                    # Campo personalizzabile per il prezzo giornaliero
+                    prezzo_default = mappa_auto[auto_scelta_label][1] if auto_scelta_label in mappa_auto else 50.0
+                    prezzo_personalizzato = st.number_input("Prezzo Giornaliero Applicato (€) *", min_value=0.0, value=prezzo_default)
+
                 with c2:
                     data_inizio_cli = st.date_input("Data Inizio Noleggio *", date.today())
                     data_fine_cli = st.date_input("Data Fine Noleggio *", date.today())
+                    
+                    # Campo per gestire lo stato del veicolo in fase di assegnazione
+                    stato_nuovo = st.selectbox(
+                        "Stato Veicolo *",
+                        ["Noleggiata", "In Manutenzione", "Disponibile"],
+                        index=0
+                    )
                     note_cli = st.text_area("Note / Dettagli Cliente", placeholder="Eventuali annotazioni...")
 
                 submit_cliente = st.form_submit_button("💾 Salva Cliente e Avvia Noleggio", type="primary")
@@ -656,24 +658,25 @@ with tab_nuovo_cliente:
                     elif not auto_scelta_label:
                         st.error("Seleziona un veicolo valido.")
                     else:
-                        targa_selezionata = mappa_auto.get(auto_scelta_label)
+                        targa_selezionata = mappa_auto.get(auto_scelta_label)[0]
                         try:
                             df_agg = formatta_date_df(df)
-                            idx_matches = df_agg[df_agg[col_targa_k] == targa_selezionata].index
+                            idx_matches = df_agg[df_agg[COL_TARGA] == targa_selezionata].index
 
                             if len(idx_matches) > 0:
                                 i = idx_matches[0]
-                                prezzo_giornaliero = float(df_agg.loc[i, col_prezzo_k]) if pd.notna(df_agg.loc[i, col_prezzo_k]) and str(df_agg.loc[i, col_prezzo_k]) != '' else 0.0
                                 
+                                # Calcolo dei giorni e del costo totale basato sul prezzo scelto
                                 giorni = (data_fine_cli - data_inizio_cli).days
                                 giorni = 1 if giorni < 1 else giorni
-                                costo_totale = giorni * prezzo_giornaliero
+                                costo_totale = giorni * prezzo_personalizzato
 
-                                # Aggiorna lo stato a "Noleggiata", inserisce il cliente e calcola il costo
-                                df_agg.loc[i, col_stato_k] = "Noleggiata"
+                                # Aggiorna i campi sul dataframe usando le costanti globali
+                                df_agg.loc[i, COL_STATO] = str(stato_nuovo)
                                 df_agg.loc[i, COL_CLIENTE] = nome_cliente.strip()
                                 df_agg.loc[i, COL_DATA_INI] = str(data_inizio_cli)
                                 df_agg.loc[i, COL_DATA_FIN] = str(data_fine_cli)
+                                df_agg.loc[i, COL_PREZZO] = float(prezzo_personalizzato)
                                 df_agg.loc[i, COL_COSTO] = float(costo_totale)
                                 if note_cli.strip():
                                     df_agg.loc[i, COL_NOTE] = note_cli.strip()
@@ -688,7 +691,7 @@ with tab_nuovo_cliente:
                                 res_json = res.json() if res.status_code == 200 else {}
 
                                 if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
-                                    st.success(f"✅ Cliente {nome_cliente} registrato con successo e veicolo {targa_selezionata} impostato su 'Noleggiata'!")
+                                    st.success(f"✅ Cliente {nome_cliente} registrato con successo e veicolo {targa_selezionata} aggiornato!")
                                     st.cache_data.clear()
                                     time.sleep(1)
                                     st.rerun()
