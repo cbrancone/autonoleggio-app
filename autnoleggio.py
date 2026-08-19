@@ -108,7 +108,7 @@ tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo_noleggio, tab_nuovo_
     "📜 Storico & Ricerca",
     "📋 Registro Flotta",
     "➕ Nuovo Noleggio",
-    "🚗 Inserisci Nuovo Veicolo"
+    "🚗 Inserisci Nuovo Cliente"
 ])
 
 # =========================================================
@@ -627,85 +627,77 @@ with tab_nuovo_noleggio:
                     st.error(f"Errore di connessione: {e}")
 
 # =========================================================
-# TAB 6: INSERISCI NUOVO VEICOLO IN FLOTTA
+# TAB 6: INSERISCI NUOVO CLIENTE & ASSEGNARSI AUTO
 # =========================================================
-with tab_nuovo_veicolo:
-    st.subheader("🚗 Aggiungi un Nuovo Veicolo al Parco Auto")
+with tab_nuovo_cliente:
+    st.subheader("👤 Registrazione Nuovo Cliente e Associazione Veicolo")
 
-    with st.form("form_nuovo_veicolo", clear_on_submit=True):
-        c1, c2 = st.columns(2)
+    if not df.empty and COL_STATO in df.columns:
+        df_disponibili = df[df[COL_STATO] == "Disponibile"]
 
-        with c1:
-            targa = st.text_input(f"{COL_TARGA} *").upper()
-            marca = st.text_input(f"{COL_MARCA} *")
-            modello = st.text_input(f"{COL_MODELLO} *")
-            categoria = st.selectbox(
-                COL_CATEGORIA,
-                ["Utilitaria", "Berlina", "SUV", "Station Wagon", "Furgone"],
-            )
-            prezzo_giornaliero = st.number_input(
-                f"{COL_PREZZO} *", min_value=0.0, value=50.0
-            )
-            anno_imm = st.number_input(
-                COL_ANNO, min_value=1990, max_value=2030, value=2023
-            )
+        if df_disponibili.empty:
+            st.warning("⚠️ Al momento non ci sono veicoli disponibili da poter assegnare a un nuovo cliente.")
+        else:
+            opzioni_auto = df_disponibili.apply(
+                lambda r: f"{r.get(COL_TARGA, '')} - {r.get(COL_MARCA, '')} {r.get(COL_MODELLO, '')}",
+                axis=1,
+            ).tolist()
 
-        with c2:
-            cliente = st.text_input(COL_CLIENTE, placeholder="Se noleggiato subito, inserisci cliente")
-            stato = st.selectbox(
-                f"{COL_STATO} *",
-                ["Disponibile", "Noleggiata", "In Manutenzione"],
-            )
-            data_inizio = st.date_input(COL_DATA_INI, date.today())
-            data_fine = st.date_input(COL_DATA_FIN, date.today())
-            note = st.text_area(COL_NOTE)
-            note1 = st.text_input(COL_NOTE1)
-            note_checkin = st.text_input(COL_NOTE_CHECKIN)
+            with st.form("form_nuovo_cliente", clear_on_submit=True):
+                c1, c2 = st.columns(2)
+                with c1:
+                    nome_cliente = st.text_input("Nome e Cognome Cliente *", placeholder="es. Mario Rossi")
+                    auto_assegnata = st.selectbox("Seleziona Veicolo Disponibile *", opzioni_auto)
+                with c2:
+                    data_inizio_cli = st.date_input("Data Inizio Noleggio *", date.today())
+                    data_fine_cli = st.date_input("Data Fine Noleggio *", date.today())
+                    note_cli = st.text_area("Note / Dettagli Cliente", placeholder="Eventuali annotazioni o documenti...")
 
-        giorni = (data_fine - data_inizio).days
-        giorni = 1 if giorni < 1 else giorni
-        costo_totale = (
-            giorni * prezzo_giornaliero if stato == "Noleggiata" else 0.0
-        )
+                submit_cliente = st.form_submit_button("💾 Salva Cliente e Avvia Noleggio", type="primary")
 
-        if stato == "Noleggiata":
-            st.info(f"📐 **Costo Totale Calcolato:** € {costo_totale:.2f}")
-
-        submit_veicolo = st.form_submit_button("💾 Salva Nuovo Veicolo nel Foglio", type="primary")
-
-        if submit_veicolo:
-            if not targa or not marca or not modello:
-                st.error("Compila i campi obbligatori: Targa, Marca e Modello.")
-            else:
-                payload = {
-                    "action": "append",
-                    COL_TARGA: str(targa),
-                    COL_MARCA: str(marca),
-                    COL_MODELLO: str(modello),
-                    COL_CATEGORIA: str(categoria),
-                    COL_PREZZO: str(prezzo_giornaliero),
-                    COL_ANNO: str(int(anno_imm)),
-                    COL_CLIENTE: str(cliente) if cliente else "N/D",
-                    COL_STATO: str(stato),
-                    COL_DATA_INI: str(data_inizio) if stato == "Noleggiata" else "",
-                    COL_DATA_FIN: str(data_fine) if stato == "Noleggiata" else "",
-                    COL_NOTE: str(note),
-                    COL_COSTO: str(costo_totale),
-                    COL_NOTE1: str(note1),
-                    COL_NOTE_CHECKIN: str(note_checkin),
-                }
-
-                try:
-                    res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
-                    res_json = res.json() if res.status_code == 200 else {}
-
-                    if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
-                        st.success(f"✅ Veicolo con targa {targa} aggiunto con successo alla flotta!")
-                        st.cache_data.clear()
-                        time.sleep(1)
-                        st.rerun()
+                if submit_cliente:
+                    if not nome_cliente.strip():
+                        st.error("Inserisci il nome e cognome del cliente.")
                     else:
-                        st.error(f"Errore risposta server: {res.text}")
-                except Exception as e:
-                    st.error(f"Errore di connessione: {e}")
+                        targa_scelta = auto_assegnata.split(" - ")[0]
+                        try:
+                            df_agg = formatta_date_df(df)
+                            idx = df_agg[df_agg[COL_TARGA] == targa_scelta].index
+
+                            if len(idx) > 0:
+                                i = idx[0]
+                                prezzo_giornaliero = float(df_agg.loc[i, COL_PREZZO]) if pd.notna(df_agg.loc[i, COL_PREZZO]) and str(df_agg.loc[i, COL_PREZZO]) != '' else 0.0
+                                
+                                giorni = (data_fine_cli - data_inizio_cli).days
+                                giorni = 1 if giorni < 1 else giorni
+                                costo_totale = giorni * prezzo_giornaliero
+
+                                df_agg.loc[i, COL_STATO] = "Noleggiata"
+                                df_agg.loc[i, COL_CLIENTE] = nome_cliente.strip()
+                                df_agg.loc[i, COL_DATA_INI] = str(data_inizio_cli)
+                                df_agg.loc[i, COL_DATA_FIN] = str(data_fine_cli)
+                                df_agg.loc[i, COL_COSTO] = float(costo_totale)
+                                if note_cli.strip():
+                                    df_agg.loc[i, COL_NOTE] = note_cli.strip()
+
+                                rows_payload = df_agg.fillna("").astype(str).to_dict(orient="records")
+                                payload = {
+                                    "action": "update_all",
+                                    "rows": rows_payload,
+                                }
+
+                                res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
+                                res_json = res.json() if res.status_code == 200 else {}
+
+                                if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
+                                    st.success(f"✅ Cliente {nome_cliente} registrato con successo e veicolo {targa_scelta} associato!")
+                                    st.cache_data.clear()
+                                    time.sleep(1)
+                                    st.rerun()
+                                else:
+                                    st.error(f"Errore server: {res.text}")
+                        except Exception as e:
+                            st.error(f"Errore durante la registrazione del cliente: {e}")
+    else:
+        st.info("Nessun dato disponibile nel sistema.")
 
