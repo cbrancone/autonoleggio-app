@@ -697,6 +697,6 @@ with tab_nuovo_cliente:
                             else:
                                 st.error(f"Impossibile trovare la targa {targa_selezionata} nel database.")
                         except Exception as e:
-                            st.error(f``Errore durante la registrazione del cliente: {e}``)
+                            st.error(f"Errore durante la registrazione del cliente: {e}")
     else:
         st.info("Nessun dato disponibile nel sistema.")
