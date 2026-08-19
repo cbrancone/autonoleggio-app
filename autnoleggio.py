@@ -546,33 +546,19 @@ with tab_nuovo_veicolo:
                 COL_CATEGORIA,
                 ["Utilitaria", "Berlina", "SUV", "Station Wagon", "Furgone"],
             )
+
+        with c2:
             prezzo_giornaliero = st.number_input(
                 f"{COL_PREZZO} *", min_value=0.0, value=50.0
             )
             anno_imm = st.number_input(
                 COL_ANNO, min_value=1990, max_value=2030, value=2023
             )
-
-        with c2:
-            cliente = st.text_input(COL_CLIENTE, placeholder="Eventuale cliente iniziale")
             stato = st.selectbox(
                 f"{COL_STATO} *",
-                ["Disponibile", "Noleggiata", "In Manutenzione"],
+                ["Disponibile", "In Manutenzione"],
             )
-            data_inizio = st.date_input(COL_DATA_INI, date.today())
-            data_fine = st.date_input(COL_DATA_FIN, date.today())
-            note = st.text_area(COL_NOTE)
-            note1 = st.text_input(COL_NOTE1)
-            note_checkin = st.text_input(COL_NOTE_CHECKIN)
-
-        giorni = (data_fine - data_inizio).days
-        giorni = 1 if giorni < 1 else giorni
-        costo_totale = (
-            giorni * prezzo_giornaliero if stato == "Noleggiata" else 0.0
-        )
-
-        if stato == "Noleggiata":
-            st.info(f"📐 **Costo Totale Calcolato:** € {costo_totale:.2f}")
+            note1 = st.text_input(COL_NOTE1, placeholder="Eventuali annotazioni sul veicolo...")
 
         submit_veicolo = st.form_submit_button("💾 Salva Nuovo Veicolo nel Foglio", type="primary")
 
@@ -588,14 +574,14 @@ with tab_nuovo_veicolo:
                     COL_CATEGORIA: str(categoria),
                     COL_PREZZO: str(prezzo_giornaliero),
                     COL_ANNO: str(int(anno_imm)),
-                    COL_CLIENTE: str(cliente) if cliente else "N/D",
+                    COL_CLIENTE: "N/D",
                     COL_STATO: str(stato),
-                    COL_DATA_INI: str(data_inizio) if stato == "Noleggiata" else "",
-                    COL_DATA_FIN: str(data_fine) if stato == "Noleggiata" else "",
-                    COL_NOTE: str(note),
-                    COL_COSTO: str(costo_totale),
+                    COL_DATA_INI: "",
+                    COL_DATA_FIN: "",
+                    COL_NOTE: "",
+                    COL_COSTO: "0.0",
                     COL_NOTE1: str(note1),
-                    COL_NOTE_CHECKIN: str(note_checkin),
+                    COL_NOTE_CHECKIN: "",
                 }
 
                 try:
@@ -603,7 +589,7 @@ with tab_nuovo_veicolo:
                     res_json = res.json() if res.status_code == 200 else {}
 
                     if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
-                        st.success(f"✅ Veicolo con targa {targa} aggiunto con successo!")
+                        st.success(f"✅ Veicolo con targa {targa} aggiunto con successo alla flotta!")
                         st.cache_data.clear()
                         time.sleep(1)
                         st.rerun()
