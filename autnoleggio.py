@@ -599,22 +599,32 @@ with tab_nuovo_veicolo:
                     st.error(f"Errore di connessione: {e}")
 
 # =========================================================
-# TAB 6: INSERISCI NUOVO CLIENTE
+# TAB 6: INSERISCI NUOVO CLIENTE & STORICO PREZZI
 # =========================================================
 with tab_nuovo_cliente:
-    st.subheader("👤 Registrazione Nuovo Cliente e Assegnazione Auto")
+    st.subheader("👤 Registrazione Cliente e Storico Precedenti")
 
     if not df.empty and COL_STATO in df.columns:
-        # Pulisce la colonna stato da spazi superflui e uniforma le maiuscole/minuscole
+        # Pulisce la colonna stato per trovare le auto disponibili
         df_temp = df.copy()
         df_temp['stato_pulito'] = df_temp[COL_STATO].astype(str).str.strip().str.capitalize()
-        
-        # Filtra i veicoli disponibili
         df_disponibili = df_temp[df_temp['stato_pulito'] == "Disponibile"]
+
+        # Mostra l'elenco dei clienti già presenti nel sistema per eventuale riferimento storico
+        clienti_esistenti = [c for c in df[COL_CLIENTE].unique() if c and str(c).strip().upper() not in ["N/D", ""]]
+        
+        if clienti_esistenti:
+            with st.expander("🔍 Visualizza storico e prezzi dei clienti esistenti"):
+                 cliente_selezionato_storico = st.selectbox("Seleziona un cliente per vedere i noleggi passati:", ["-- Seleziona --"] + clienti_esistenti)
+                 if cliente_selezionato_storico != "-- Seleziona --":
+                     df_storico_cli = df[df[COL_CLIENTE] == cliente_selezionato_storico]
+                     st.dataframe(
+                         df_storico_cli[[COL_TARGA, COL_MARCA, COL_MODELLO, COL_DATA_INI, COL_DATA_FIN, COL_COSTO, COL_STATO]],
+                         use_container_width=True
+                     )
 
         if df_disponibili.empty:
             st.warning("⚠️ Al momento non ci sono veicoli con stato 'Disponibile' nel foglio Google Sheets.")
-            st.info(f"Stati attualmente presenti nel database: {list(df[COL_STATO].unique())}")
         else:
             opzioni_auto = df_disponibili.apply(
                 lambda r: f"{r.get(COL_TARGA, '')} - {r.get(COL_MARCA, '')} {r.get(COL_MODELLO, '')}",
