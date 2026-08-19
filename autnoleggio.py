@@ -13,6 +13,10 @@ st.set_page_config(page_title="Gestione Autonoleggio", layout="wide")
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyKMhlDddoULMNfyx_1sdV_63rEofWq-U2hyzIfVs1yao-Gy5NFuH5f41WWKbJoHitT/exec"
 
 # Nomi standard delle colonne (devono corrispondere alle intestazioni del tuo Google Sheet)
+COL_KM_INIZIALI = "Km Iniziali"
+COL_KM_FINALI = "Km Finali"
+COL_PAGAMENTO = "Metodo Pagamento"
+COL_CAUZIONE = "Cauzione"
 COL_TARGA = "Targa"
 COL_MARCA = "Marca"
 COL_MODELLO = "Modello"
@@ -222,11 +226,13 @@ with tab_nuovo_veicolo:
     with st.form("form_nuovo_veicolo", clear_on_submit=True):
         c1, c2 = st.columns(2)
         with c1:
+           
             targa = st.text_input(f"{COL_TARGA} *").upper()
             marca = st.text_input(f"{COL_MARCA} *")
             modello = st.text_input(f"{COL_MODELLO} *")
             categoria = st.selectbox(COL_CATEGORIA, ["Utilitaria", "Berlina", "SUV", "Station Wagon", "Furgone"])
         with c2:
+            km_iniziali = st.number_input("Km Iniziali *", min_value=0, value=0, step=100)
             prezzo_giornaliero = st.number_input(f"{COL_PREZZO} *", min_value=0.0, value=50.0)
             anno_imm = st.number_input(COL_ANNO, min_value=1990, max_value=2030, value=2023)
             stato = st.selectbox(f"{COL_STATO} *", ["Disponibile", "In Manutenzione"])
@@ -240,6 +246,10 @@ with tab_nuovo_veicolo:
             else:
                 payload = {
                     "action": "append",
+                    COL_KM_INIZIALI: str(km_iniziali),
+                    COL_KM_FINALI: "",
+                    COL_PAGAMENTO: "",
+                    COL_CAUZIONE: "0.0",
                     COL_TARGA: str(targa),
                     COL_MARCA: str(marca),
                     COL_MODELLO: str(modello),
