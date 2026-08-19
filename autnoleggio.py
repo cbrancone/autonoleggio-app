@@ -10,7 +10,7 @@ import time
 st.set_page_config(page_title="Gestione Autonoleggio", layout="wide")
 
 # INSERISCI QUI IL TUO URL DI GOOGLE APPS SCRIPT
-APPS_SCRIPT_URL = "INSERISCI_QUI_IL_TUO_URL_DI_APPS_SCRIPT"
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyKMhlDddoULMNfyx_1sdV_63rEofWq-U2hyzIfVs1yao-Gy5NFuH5f41WWKbJoHitT/exec"
 
 # Nomi standard delle colonne (devono corrispondere alle intestazioni del tuo Google Sheet)
 COL_TARGA = "Targa"
