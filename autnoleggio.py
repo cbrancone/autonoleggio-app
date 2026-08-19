@@ -710,19 +710,29 @@ with tab_nuovo_cliente:
                                     "rows": rows_payload,
                                 }
 
-                                res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
-                                res_json = res.json() if res.status_code == 200 else {}
-
-                                if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
-                                    st.success(f"✅ Cliente {nome_cliente} registrato e veicolo {targa_selezionata} aggiornato con successo!")
-                                    st.cache_data.clear()
-                                    time.sleep(1)
-                                    st.rerun()
+                                # Invio dei dati con gestione sicura della risposta
+                                res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
+                                
+                                if res.status_code == 200:
+                                    try:
+                                        res_json = res.json()
+                                    except:
+                                        res_json = {"status": "error", "message": "Risposta non in formato JSON: " + res.text}
+                                    
+                                    if res_json.get("status") in ["ok", "success"]:
+                                        st.success(f"✅ Cliente {nome_cliente} registrato e veicolo {targa_selezionata} aggiornato con successo!")
+                                        st.cache_data.clear()
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Errore restituito dal server Google: {res_json.get('message', 'Sconosciuto')}")
+                                        st.write("Dettaglio risposta:", res_json)
                                 else:
-                                    st.error(f"Errore server: {res.text}")
+                                    st.error(f"Errore di comunicazione HTTP {res.status_code}")
+                                    st.text(res.text)
                             else:
                                 st.error(f"Impossibile trovare la targa {targa_selezionata} nel database.")
                         except Exception as e:
-                            st.error(f"Errore durante la registrazione del cliente: {e}")
+                            st.error(f"Errore imprevisto durante il salvataggio: {e}")
     else:
         st.info("Nessun dato disponibile nel sistema.")
