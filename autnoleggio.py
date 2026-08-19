@@ -566,22 +566,24 @@ with tab_nuovo_veicolo:
             if not targa or not marca or not modello:
                 st.error("Compila i campi obbligatori: Targa, Marca e Modello.")
             else:
+                # Costruiamo il payload usando direttamente i nomi delle costanti globali 
+                # per allinearlo perfettamente alla struttura del foglio Google Sheets
                 payload = {
                     "action": "append",
-                    COL_TARGA: str(targa),
-                    COL_MARCA: str(marca),
-                    COL_MODELLO: str(modello),
-                    COL_CATEGORIA: str(categoria),
-                    COL_PREZZO: str(prezzo_giornaliero),
-                    COL_ANNO: str(int(anno_imm)),
-                    COL_CLIENTE: "N/D",
-                    COL_STATO: str(stato),
-                    COL_DATA_INI: "",
-                    COL_DATA_FIN: "",
-                    COL_NOTE: "",
-                    COL_COSTO: "0.0",
-                    COL_NOTE1: str(note1),
-                    COL_NOTE_CHECKIN: "",
+                    str(COL_TARGA): str(targa),
+                    str(COL_MARCA): str(marca),
+                    str(COL_MODELLO): str(modello),
+                    str(COL_CATEGORIA): str(categoria),
+                    str(COL_PREZZO): str(prezzo_giornaliero),
+                    str(COL_ANNO): str(int(anno_imm)),
+                    str(COL_CLIENTE): "N/D",
+                    str(COL_STATO): str(stato),
+                    str(COL_DATA_INI): "",
+                    str(COL_DATA_FIN): "",
+                    str(COL_NOTE): "",
+                    str(COL_COSTO): "0.0",
+                    str(COL_NOTE1): str(note1),
+                    str(COL_NOTE_CHECKIN): "",
                 }
 
                 try:
@@ -597,7 +599,6 @@ with tab_nuovo_veicolo:
                         st.error(f"Errore risposta server: {res.text}")
                 except Exception as e:
                     st.error(f"Errore di connessione: {e}")
-
 # =========================================================
 # TAB 6: INSERISCI NUOVO CLIENTE & ASSEGNAZIONE VEICOLO
 # =========================================================
