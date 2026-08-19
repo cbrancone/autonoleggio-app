@@ -275,23 +275,43 @@ with tab_nuovo_cliente:
     st.subheader("👤 Registrazione Nuovo Cliente e Assegnazione Veicolo")
 
     if not df.empty:
+        # Cerca la colonna dello stato in modo flessibile
+        def trova_col(keywords):
+            for col in df.columns:
+                for kw in keywords:
+                    if kw.lower() in str(col).lower():
+                        return col
+            return None
+
+        c_stato = COL_STATO if COL_STATO in df.columns else trova_col(["stato"])
+        c_targa = COL_TARGA if COL_TARGA in df.columns else trova_col(["targa"])
+        c_marca = COL_MARCA if COL_MARCA in df.columns else trova_col(["marca"])
+        c_modello = COL_MODELLO if COL_MODELLO in df.columns else trova_col(["modello"])
+        c_prezzo = COL_PREZZO if COL_PREZZO in df.columns else trova_col(["prezzo"])
+
         df_temp = df.copy()
-        if COL_STATO in df_temp.columns:
-            df_temp['stato_pulito'] = df_temp[COL_STATO].astype(str).str.strip().str.capitalize()
-            df_disponibili = df_temp[df_temp['stato_pulito'] == "Disponibile"]
+        if c_stato and c_stato in df_temp.columns:
+            # Pulisce lo stato rimuovendo spazi e portandolo in minuscolo
+            df_temp['stato_pulito'] = df_temp[c_stato].astype(str).str.strip().str.lower()
+            # Filtra cercando qualsiasi variante che significhi disponibilità
+            df_disponibili = df_temp[df_temp['stato_pulito'].isin(["disponibile", "disponibili", "libera", "libero", ""])]
         else:
             df_disponibili = pd.DataFrame()
 
         if df_disponibili.empty:
             st.warning("⚠️ Al momento non ci sono veicoli con stato 'Disponibile' nel registro flotta.")
+            if c_stato in df.columns:
+                st.info(f"Stati attualmente presenti nel tuo foglio Google Sheets: {list(df[c_stato].unique())}")
+            else:
+                st.info("Colonna dello stato non trovata nel DataFrame.")
         else:
             opzioni_auto = []
             mappa_auto = {}
             for idx, r in df_disponibili.iterrows():
-                t = str(r.get(COL_TARGA, ''))
-                m = str(r.get(COL_MARCA, ''))
-                mod = str(r.get(COL_MODELLO, ''))
-                p = r.get(COL_PREZZO, 0.0)
+                t = str(r.get(c_targa, ''))
+                m = str(r.get(c_marca, ''))
+                mod = str(r.get(c_modello, ''))
+                p = r.get(c_prezzo, 0.0)
                 
                 label = f"{t} - {m} {mod} (Prezzo base: €{p}/giorno)"
                 opzioni_auto.append(label)
@@ -325,7 +345,7 @@ with tab_nuovo_cliente:
                         targa_selezionata = mappa_auto.get(auto_scelta_label)[0]
                         try:
                             df_agg = formatta_date_df(df)
-                            idx_matches = df_agg[df_agg[COL_TARGA] == targa_selezionata].index
+                            idx_matches = df_agg[df_agg[c_targa] == targa_selezionata].index
 
                             if len(idx_matches) > 0:
                                 i = idx_matches[0]
@@ -333,12 +353,12 @@ with tab_nuovo_cliente:
                                 giorni = 1 if giorni < 1 else giorni
                                 costo_totale = giorni * prezzo_personalizzato
 
-                                df_agg.loc[i, COL_STATO] = str(stato_nuovo)
-                                df_agg.loc[i, COL_CLIENTE] = nome_cliente.strip()
-                                df_agg.loc[i, COL_DATA_INI] = str(data_inizio_cli)
-                                df_agg.loc[i, COL_DATA_FIN] = str(data_fine_cli)
-                                df_agg.loc[i, COL_PREZZO] = float(prezzo_personalizzato)
-                                df_agg.loc[i, COL_COSTO] = float(costo_totale)
+                                if c_stato: df_agg.loc[i, c_stato] = str(stato_nuovo)
+                                if COL_CLIENTE in df_agg.columns: df_agg.loc[i, COL_CLIENTE] = nome_cliente.strip()
+                                if COL_DATA_INI in df_agg.columns: df_agg.loc[i, COL_DATA_INI] = str(data_inizio_cli)
+                                if COL_DATA_FIN in df_agg.columns: df_agg.loc[i, COL_DATA_FIN] = str(data_fine_cli)
+                                if c_prezzo in df_agg.columns: df_agg.loc[i, c_prezzo] = float(prezzo_personalizzato)
+                                if COL_COSTO in df_agg.columns: df_agg.loc[i, COL_COSTO] = float(costo_totale)
                                 if note_cli.strip() and COL_NOTE in df_agg.columns:
                                     df_agg.loc[i, COL_NOTE] = note_cli.strip()
 
