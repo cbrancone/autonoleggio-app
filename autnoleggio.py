@@ -606,7 +606,7 @@ with tab_nuovo_cliente:
     st.subheader("👤 Registrazione Nuovo Cliente e Assegnazione Veicolo")
 
     if not df.empty:
-        # Funzione intelligente per trovare le colonne nel DataFrame anche se i nomi differiscono leggermente
+        # Funzione di supporto per trovare le colonne nel DataFrame in modo flessibile
         def trova_col(keywords):
             for col in df.columns:
                 for kw in keywords:
@@ -617,17 +617,15 @@ with tab_nuovo_cliente:
         c_targa = COL_TARGA if COL_TARGA in df.columns else trova_col(["targa"])
         c_marca = COL_MARCA if COL_MARCA in df.columns else trova_col(["marca"])
         c_modello = COL_MODELLO if COL_MODELLO in df.columns else trova_col(["modello"])
-        c_prezzo = COL_PREZZO if COL_PREZZO in df.columns else trova_col(["prezzo", "costo"])
+        c_prezzo = COL_PREZZO if COL_PREZZO in df.columns else trova_col(["prezzo", "costo giornaliero"])
         c_stato = COL_STATO if COL_STATO in df.columns else trova_col(["stato"])
+        c_cliente = COL_CLIENTE if COL_CLIENTE in df.columns else trova_col(["cliente"])
+        c_dataini = COL_DATA_INI if COL_DATA_INI in df.columns else trova_col(["inizio", "data inizio"])
+        c_datafin = COL_DATA_FIN if COL_DATA_FIN in df.columns else trova_col(["fine", "data fine"])
+        c_costo = COL_COSTO if COL_COSTO in df.columns else trova_col(["costo totale", "totale"])
+        c_note = COL_NOTE if COL_NOTE in df.columns else trova_col(["note"])
 
-        # Fallback sulle posizioni standard se non trova i nomi
-        if not c_targa and len(df.columns) > 0: c_targa = df.columns[0]
-        if not c_marca and len(df.columns) > 1: c_marca = df.columns[1]
-        if not c_modello and len(df.columns) > 2: c_modello = df.columns[2]
-        if not c_prezzo and len(df.columns) > 4: c_prezzo = df.columns[4]
-        if not c_stato and len(df.columns) > 7: c_stato = df.columns[7]
-
-        # Pulisce la colonna stato per filtrare le auto disponibili
+        # Filtra i veicoli disponibili
         df_temp = df.copy()
         if c_stato and c_stato in df_temp.columns:
             df_temp['stato_pulito'] = df_temp[c_stato].astype(str).str.strip().str.capitalize()
@@ -639,8 +637,6 @@ with tab_nuovo_cliente:
             st.warning("⚠️ Al momento non ci sono veicoli con stato 'Disponibile' nel registro flotta.")
             if c_stato in df.columns:
                 st.info(f"Stati attualmente presenti nel foglio: {list(df[c_stato].unique())}")
-            else:
-                st.info(f"Colonne rilevate nel foglio: {list(df.columns)}")
         else:
             opzioni_auto = []
             mappa_auto = {}
@@ -698,19 +694,15 @@ with tab_nuovo_cliente:
                                 giorni = 1 if giorni < 1 else giorni
                                 costo_totale = giorni * prezzo_personalizzato
 
-                                df_agg.loc[i, c_stato] = str(stato_nuovo)
-                                if COL_CLIENTE in df_agg.columns:
-                                    df_agg.loc[i, COL_CLIENTE] = nome_cliente.strip()
-                                if COL_DATA_INI in df_agg.columns:
-                                    df_agg.loc[i, COL_DATA_INI] = str(data_inizio_cli)
-                                if COL_DATA_FIN in df_agg.columns:
-                                    df_agg.loc[i, COL_DATA_FIN] = str(data_fine_cli)
-                                if c_prezzo in df_agg.columns:
-                                    df_agg.loc[i, c_prezzo] = float(prezzo_personalizzato)
-                                if COL_COSTO in df_agg.columns:
-                                    df_agg.loc[i, COL_COSTO] = float(costo_totale)
-                                if note_cli.strip() and COL_NOTE in df_agg.columns:
-                                    df_agg.loc[i, COL_NOTE] = note_cli.strip()
+                                # Scrive i dati usando i nomi di colonna effettivamente trovati
+                                if c_stato: df_agg.loc[i, c_stato] = str(stato_nuovo)
+                                if c_cliente: df_agg.loc[i, c_cliente] = nome_cliente.strip()
+                                if c_dataini: df_agg.loc[i, c_dataini] = str(data_inizio_cli)
+                                if c_datafin: df_agg.loc[i, c_datafin] = str(data_fine_cli)
+                                if c_prezzo: df_agg.loc[i, c_prezzo] = float(prezzo_personalizzato)
+                                if c_costo: df_agg.loc[i, c_costo] = float(costo_totale)
+                                if note_cli.strip() and c_note: 
+                                    df_agg.loc[i, c_note] = note_cli.strip()
 
                                 rows_payload = df_agg.fillna("").astype(str).to_dict(orient="records")
                                 payload = {
@@ -722,7 +714,7 @@ with tab_nuovo_cliente:
                                 res_json = res.json() if res.status_code == 200 else {}
 
                                 if res.status_code == 200 and res_json.get("status") in ["ok", "success"]:
-                                    st.success(f"✅ Cliente {nome_cliente} registrato con successo e veicolo {targa_selezionata} aggiornato!")
+                                    st.success(f"✅ Cliente {nome_cliente} registrato e veicolo {targa_selezionata} aggiornato con successo!")
                                     st.cache_data.clear()
                                     time.sleep(1)
                                     st.rerun()
