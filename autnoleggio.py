@@ -93,47 +93,100 @@ with tab_dash:
 # =========================================================
 with tab_rientro:
     st.subheader("🔑 Gestione Rientro Veicolo")
-    if not df.empty and COL_STATO in df.columns:
-        df_noleggiate = df[df[COL_STATO].astype(str).str.strip().str.capitalize() == "Noleggiata"]
-        if df_noleggiate.empty:
-            st.info("Nessun veicolo attualmente noleggiato.")
+    
+    if not df.empty:
+        # Cerca la colonna dello stato in modo flessibile
+        def trova_col(keywords):
+            for col in df.columns:
+                for kw in keywords:
+                    if kw.lower() in str(col).lower():
+                        return col
+            return None
+
+        c_stato = COL_STATO if COL_STATO in df.columns else trova_col(["stato"])
+        c_targa = COL_TARGA if COL_TARGA in df.columns else trova_col(["targa"])
+        c_marca = COL_MARCA if COL_MARCA in df.columns else trova_col(["marca"])
+        c_modello = COL_MODELLO if COL_MODELLO in df.columns else trova_col(["modello"])
+        c_cliente = COL_CLIENTE if COL_CLIENTE in df.columns else trova_col(["cliente"])
+
+        if c_stato and c_stato in df.columns:
+            # Pulisce lo stato per intercettare "Noleggiata", "Noleggiato", ecc.
+            df_temp = df.copy()
+            df_temp['stato_pulito'] = df_temp[c_stato].astype(str).str.strip().str.lower()
+            df_noleggiate = df_temp[df_temp['stato_pulito'].isin(["noleggiata", "noleggiato", "affittata", "in uso"])]
         else:
-            opzioni_rientro = df_noleggiate.apply(
-                lambda r: f"{r.get(COL_TARGA, '')} - {r.get(COL_MARCA, '')} {r.get(COL_MODELLO, '')} (Cliente: {r.get(COL_CLIENTE, 'N/D')})",
-                axis=1
-            ).tolist()
+            df_noleggiate = pd.DataFrame()
+
+        if df_noleggiate.empty:
+            st.info("ℹ️ Al momento non ci risulta alcun veicolo con stato 'Noleggiata'.")
+            if c_stato in df.columns:
+                st.write("Stati attualmente presenti nel database:", list(df[c_stato].unique()))
+        else:
+            opzioni_rientro = []
+            mappa_rientro = {}
             
+            for idx, r in df_noleggiate.iterrows():
+                t = str(r.get(c_targa, ''))
+                m = str(r.get(c_marca, ''))
+                mod = str(r.get(c_modello, ''))
+                cli = str(r.get(c_cliente, 'N/D'))
+                
+                label = f"{t} - {m} {mod} (Cliente: {cli})"
+                opzioni_auto = label
+                opzioni_rientro.append(label)
+                mappa_rientro[label] = t
+
             with st.form("form_rientro"):
-                auto_sel = st.selectbox("Seleziona Veicolo in Rientro", opzioni_rientro)
-                nota_checkin = st.text_area("Note Check-in / Condizioni Veicolo")
+                auto_sel = st.selectbox("Seleziona Veicolo in Rientro *", opzioni_rientro)
+                nota_checkin = st.text_area("Note Check-in / Condizioni Veicolo", placeholder="es. Condizioni ottime, nessun danno...")
                 submit_rientro = st.form_submit_button("🔄 Conferma Rientro Veicolo", type="primary")
 
                 if submit_rientro:
-                    targa_r = auto_sel.split(" - ")[0]
-                    try:
-                        df_agg = formatta_date_df(df)
-                        idx = df_agg[df_agg[COL_TARGA] == targa_r].index
-                        if len(idx) > 0:
-                            i = idx[0]
-                            df_agg.loc[i, COL_STATO] = "Disponibile"
-                            df_agg.loc[i, COL_CLIENTE] = "N/D"
-                            df_agg.loc[i, COL_DATA_INI] = ""
-                            df_agg.loc[i, COL_DATA_FIN] = ""
-                            df_agg.loc[i, COL_COSTO] = "0.0"
-                            if nota_checkin.strip() and COL_NOTE_CHECKIN in df_agg.columns:
-                                df_agg.loc[i, COL_NOTE_CHECKIN] = nota_checkin.strip()
+                    if not auto_sel:
+                        st.error("Seleziona un veicolo da rientrare.")
+                    else:
+                        targa_r = mappa_rientro.get(auto_sel)
+                        try:
+                            df_agg = formatta_date_df(df)
+                            idx_matches = df_agg[df_agg[c_targa] == targa_r].index
 
-                            payload = {"action": "update_all", "rows": df_agg.fillna("").astype(str).to_dict(orient="records")}
-                            res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
-                            if res.status_code == 200 and res.json().get("status") == "success":
-                                st.success(f"✅ Veicolo {targa_r} rientrato con successo ed è ora Disponibile!")
-                                st.cache_data.clear()
-                                time.sleep(1)
-                                st.rerun()
+                            if len(idx_matches) > 0:
+                                i = idx_matches[0]
+                                
+                                # Reimposta i campi relativi al noleggio
+                                if c_stato: df_agg.loc[i, c_stato] = "Disponibile"
+                                if c_cliente: df_agg.loc[i, c_cliente] = "N/D"
+                                if COL_DATA_INI in df_agg.columns: df_agg.loc[i, COL_DATA_INI] = ""
+                                if COL_DATA_FIN in df_agg.columns: df_agg.loc[i, COL_DATA_FIN] = ""
+                                if COL_PREZZO in df_agg.columns: pass # Mantiene o resetta se serve
+                                if COL_COSTO in df_agg.columns: df_agg.loc[i, COL_COSTO] = "0.0"
+                                if nota_checkin.strip() and COL_NOTE_CHECKIN in df_agg.columns:
+                                    df_agg.loc[i, COL_NOTE_CHECKIN] = nota_checkin.strip()
+
+                                rows_payload = df_agg.fillna("").astype(str).to_dict(orient="records")
+                                payload = {
+                                    "action": "update_all",
+                                    "rows": rows_payload,
+                                }
+
+                                res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
+                                if res.status_code == 200:
+                                    res_json = res.json()
+                                    if res_json.get("status") in ["ok", "success"]:
+                                        st.success(f"✅ Veicolo {targa_r} rientrato correttamente ed è tornato Disponibile!")
+                                        st.cache_data.clear()
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Errore dal server: {res_json.get('message', 'Sconosciuto')}")
+                                else:
+                                    st.error(f"Errore HTTP {res.status_code}: {res.text}")
                             else:
-                                st.error(f"Errore server: {res.text}")
-                    except Exception as e:
-                        st.error(f"Errore durante il rientro: {e}")
+                                st.error(f"Impossibile trovare la targa {targa_r} nel registro.")
+                        except Exception as e:
+                            st.error(f"Errore durante il rientro del veicolo: {e}")
+    else:
+        st.info("Nessun dato disponibile nel sistema.")
 
 # =========================================================
 # TAB 3: STORICO & RICERCA
