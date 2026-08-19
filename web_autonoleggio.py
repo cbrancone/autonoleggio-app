@@ -19,7 +19,7 @@ else:
 
 APPS_SCRIPT_URL = st.secrets.get(
     "APPS_SCRIPT_URL",
-    "https://script.google.com/macros/s/AKfycbwfA3jz6D4tM4lCnOLgH2pZ-rtEvXJf4hi7VrAgS5YOd1bFCq-KEHavamQ8mq0sVMg1/exec",
+    "https://script.google.com/macros/s/AKfycbwbqNlexue2zPs11iyEWdXvSngMyzvEouVSANmozlf9It8vjxwS5kzmtXS2BQbTOEAK/exec",
 )
 
 # Nomi colonne esatti dal Foglio Google
