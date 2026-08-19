@@ -10,7 +10,7 @@ import streamlit as st
 # Gestione sicura dell'ID: estrae il codice ID anche se viene incollato l'URL intero
 RAW_SPREADSHEET_ID = st.secrets.get(
     "SPREADSHEET_ID",
-    "1-XQnKHP1vWFNcvjCdG631FrqIST4PmJ-MtIGdvFesEE/edit?usp=sharing",
+    "1vvU_PMVfeV0ZyotfPMYLq-acKVSuZrQkRqMkNmBrg0w/edit?usp=sharing",
 )
 if "/d/" in RAW_SPREADSHEET_ID:
     SPREADSHEET_ID = RAW_SPREADSHEET_ID.split("/d/")[1].split("/")[0]
