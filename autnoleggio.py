@@ -599,16 +599,22 @@ with tab_nuovo_veicolo:
                     st.error(f"Errore di connessione: {e}")
 
 # =========================================================
-# TAB 6: INSERISCI NUOVO CLIENTE & ASSEGNARSI AUTO
+# TAB 6: INSERISCI NUOVO CLIENTE
 # =========================================================
 with tab_nuovo_cliente:
-    st.subheader("👤 Registrazione Nuovo Cliente e Associazione Veicolo")
+    st.subheader("👤 Registrazione Nuovo Cliente e Assegnazione Auto")
 
     if not df.empty and COL_STATO in df.columns:
-        df_disponibili = df[df[COL_STATO] == "Disponibile"]
+        # Pulisce la colonna stato da spazi superflui e uniforma le maiuscole/minuscole
+        df_temp = df.copy()
+        df_temp['stato_pulito'] = df_temp[COL_STATO].astype(str).str.strip().str.capitalize()
+        
+        # Filtra i veicoli disponibili
+        df_disponibili = df_temp[df_temp['stato_pulito'] == "Disponibile"]
 
         if df_disponibili.empty:
-            st.warning("⚠️ Al momento non ci sono veicoli disponibili da poter assegnare a un nuovo cliente.")
+            st.warning("⚠️ Al momento non ci sono veicoli con stato 'Disponibile' nel foglio Google Sheets.")
+            st.info(f"Stati attualmente presenti nel database: {list(df[COL_STATO].unique())}")
         else:
             opzioni_auto = df_disponibili.apply(
                 lambda r: f"{r.get(COL_TARGA, '')} - {r.get(COL_MARCA, '')} {r.get(COL_MODELLO, '')}",
@@ -623,7 +629,7 @@ with tab_nuovo_cliente:
                 with c2:
                     data_inizio_cli = st.date_input("Data Inizio Noleggio *", date.today())
                     data_fine_cli = st.date_input("Data Fine Noleggio *", date.today())
-                    note_cli = st.text_area("Note / Dettagli Cliente", placeholder="Eventuali annotazioni o documenti...")
+                    note_cli = st.text_area("Note / Dettagli Cliente", placeholder="Eventuali annotazioni...")
 
                 submit_cliente = st.form_submit_button("💾 Salva Cliente e Avvia Noleggio", type="primary")
 
@@ -672,4 +678,3 @@ with tab_nuovo_cliente:
                             st.error(f"Errore durante la registrazione del cliente: {e}")
     else:
         st.info("Nessun dato disponibile nel sistema.")
-
