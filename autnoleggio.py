@@ -77,20 +77,64 @@ tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo_veicolo, tab_nuovo_c
 # =========================================================
 with tab_dash:
     st.subheader("📊 Panoramica Generale della Flotta")
-    if not df.empty and COL_STATO in df.columns:
-        tot_veicoli = len(df)
-        df['stato_p'] = df[COL_STATO].astype(str).str.strip().str.capitalize()
-        disponibili = len(df[df['stato_p'] == "Disponibile"])
-        noleggiate = len(df[df['stato_p'] == "Noleggiata"])
-        manutenzione = len(df[df['stato_p'] == "In Manutenzione"])
+    
+    if not df.empty:
+        # Pulizia dello stato per i calcoli
+        df_dash = df.copy()
+        c_stato = COL_STATO if COL_STATO in df_dash.columns else "Stato"
+        c_categoria = COL_CATEGORIA if COL_CATEGORIA in df_dash.columns else "Categoria"
+        c_costo = COL_COSTO if COL_COSTO in df_dash.columns else "Costo Totale"
+        
+        if c_stato in df_dash.columns:
+            df_dash['stato_p'] = df_dash[c_stato].astype(str).str.strip().str.capitalize()
+            tot_veicoli = len(df_dash)
+            disponibili = len(df_dash[df_dash['stato_p'] == "Disponibile"])
+            noleggiate = len(df_dash[df_dash['stato_p'].isin(["Noleggiata", "Noleggiato", "In Uso"])])
+            manutenzione = len(df_dash[df_dash['stato_p'].isin(["In Manutenzione", "Manutenzione"])])
+        else:
+            tot_veicoli = len(df_dash)
+            disponibili = noleggiate = manutenzione = 0
 
-        col1, col2, col3, col4 = st.columns(4)
-        col1.metric("Totale Veicoli", tot_veicoli)
-        col2.metric("Disponibili", disponibili)
-        col3.metric("Noleggiate", noleggiate)
-        col4.metric("In Manutenzione", manutenzione)
+        # Calcolo del fatturato totale stimato dai noleggi attivi
+        fatturato_totale = 0.0
+        if c_costo in df_dash.columns:
+            try:
+                fatturato_totale = pd.to_numeric(df_dash[c_costo], errors='coerce').sum()
+            except:
+                fatturato_totale = 0.0
+
+        # Mostra le metriche principali in alto
+        col1, col2, col3, col4, col5 = st.columns(5)
+        col1.metric("🚗 Totale Veicoli", tot_veicoli)
+        col2.metric("🟢 Disponibili", disponibili)
+        col3.metric("🔵 Noleggiate", noleggiate)
+        col4.metric("🟠 In Manutenzione", manutenzione)
+        col5.metric("💶 Fatturato Attivo", f"€ {fatturato_totale:,.2f}")
+
+        st.markdown("---")
+
+        # Visualizzazioni grafiche dettagliate con Streamlit
+        col_g1, col_g2 = st.columns(2)
+
+        with col_g1:
+            st.markdown("### 📊 Stato dei Veicoli in Flotta")
+            if c_stato in df_dash.columns:
+                df_stati = df_dash['stato_p'].value_counts().reset_index()
+                df_stati.columns = ['Stato', 'Quantità']
+                st.bar_chart(df_stati.set_index('Stato'))
+            else:
+                st.info("Colonna stato non disponibile per il grafico.")
+
+        with col_g2:
+            st.markdown("### 🚙 Distribuzione per Categoria")
+            if c_categoria in df_dash.columns:
+                df_cat = df_dash[c_categoria].astype(str).str.strip().value_counts().reset_index()
+                df_cat.columns = ['Categoria', 'Quantità']
+                st.bar_chart(df_cat.set_index('Categoria'))
+            else:
+                st.info("Colonna categoria non disponibile per il grafico.")
     else:
-        st.info("Nessun dato statistico disponibile.")
+        st.info("Nessun dato statistico disponibile nel sistema.")
 
 # =========================================================
 # TAB 2: RIENTRO VEICOLO (Aggiornato con Km Finali)
