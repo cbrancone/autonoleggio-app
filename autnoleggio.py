@@ -343,6 +343,8 @@ with tab_nuovo_cliente:
                     data_fine_cli = st.date_input("Data Fine Noleggio *", date.today())
                     stato_nuovo = st.selectbox("Stato Veicolo *", ["Noleggiata", "In Manutenzione", "Disponibile"], index=0)
                     note_cli = st.text_area("Note / Dettagli Cliente", placeholder="Eventuali annotazioni...")
+                    metodo_pagamento = st.selectbox("Metodo di Pagamento", ["Contanti", "Carta di Credito", "Bonifico", "Altro"])
+                    cauzione_importo = st.number_input("Cauzione / Deposito (€)", min_value=0.0, value=0
 
                 submit_cliente = st.form_submit_button("💾 Salva Cliente e Avvia Noleggio", type="primary")
 
@@ -370,6 +372,8 @@ with tab_nuovo_cliente:
                                 if c_prezzo in df_agg.columns: df_agg.loc[i, c_prezzo] = float(prezzo_personalizzato)
                                 if COL_COSTO in df_agg.columns: df_agg.loc[i, COL_COSTO] = float(costo_totale)
                                 if note_cli.strip() and COL_NOTE in df_agg.columns:
+                                if COL_PAGAMENTO in df_agg.columns: df_agg.loc[i, COL_PAGAMENTO] = str(metodo_pagamento)
+                                if COL_CAUZIONE in df_agg.columns: df_agg.loc[i, COL_CAUZIONE] = float(cauzione_importo)
                                     df_agg.loc[i, COL_NOTE] = note_cli.strip()
 
                                 rows_payload = df_agg.fillna("").astype(str).to_dict(orient="records")
