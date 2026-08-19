@@ -93,13 +93,12 @@ with tab_dash:
         st.info("Nessun dato statistico disponibile.")
 
 # =========================================================
-# TAB 2: RIENTRO VEICOLO
+# TAB 2: RIENTRO VEICOLO (Aggiornato con Km Finali)
 # =========================================================
 with tab_rientro:
     st.subheader("🔑 Gestione Rientro Veicolo")
     
     if not df.empty:
-        # Cerca la colonna dello stato in modo flessibile
         def trova_col(keywords):
             for col in df.columns:
                 for kw in keywords:
@@ -114,7 +113,6 @@ with tab_rientro:
         c_cliente = COL_CLIENTE if COL_CLIENTE in df.columns else trova_col(["cliente"])
 
         if c_stato and c_stato in df.columns:
-            # Pulisce lo stato per intercettare "Noleggiata", "Noleggiato", ecc.
             df_temp = df.copy()
             df_temp['stato_pulito'] = df_temp[c_stato].astype(str).str.strip().str.lower()
             df_noleggiate = df_temp[df_temp['stato_pulito'].isin(["noleggiata", "noleggiato", "affittata", "in uso"])]
@@ -123,8 +121,6 @@ with tab_rientro:
 
         if df_noleggiate.empty:
             st.info("ℹ️ Al momento non ci risulta alcun veicolo con stato 'Noleggiata'.")
-            if c_stato in df.columns:
-                st.write("Stati attualmente presenti nel database:", list(df[c_stato].unique()))
         else:
             opzioni_rientro = []
             mappa_rientro = {}
@@ -136,13 +132,16 @@ with tab_rientro:
                 cli = str(r.get(c_cliente, 'N/D'))
                 
                 label = f"{t} - {m} {mod} (Cliente: {cli})"
-                opzioni_auto = label
                 opzioni_rientro.append(label)
                 mappa_rientro[label] = t
 
             with st.form("form_rientro"):
                 auto_sel = st.selectbox("Seleziona Veicolo in Rientro *", opzioni_rientro)
-                nota_checkin = st.text_area("Note Check-in / Condizioni Veicolo", placeholder="es. Condizioni ottime, nessun danno...")
+                
+                # ---> NUOVO CAMPO: Km Finali nel form di rientro
+                km_finali_inseriti = st.number_input("Km Finali alla Consegna *", min_value=0, value=0, step=100)
+                
+                nota_checkin = st.text_area("Note Check-in / Condizioni Veicolo", placeholder="es. Condizioni ottime...")
                 submit_rientro = st.form_submit_button("🔄 Conferma Rientro Veicolo", type="primary")
 
                 if submit_rientro:
@@ -157,13 +156,17 @@ with tab_rientro:
                             if len(idx_matches) > 0:
                                 i = idx_matches[0]
                                 
-                                # Reimposta i campi relativi al noleggio
+                                # Aggiornamento dei campi nel DataFrame
                                 if c_stato: df_agg.loc[i, c_stato] = "Disponibile"
                                 if c_cliente: df_agg.loc[i, c_cliente] = "N/D"
                                 if COL_DATA_INI in df_agg.columns: df_agg.loc[i, COL_DATA_INI] = ""
                                 if COL_DATA_FIN in df_agg.columns: df_agg.loc[i, COL_DATA_FIN] = ""
-                                if COL_PREZZO in df_agg.columns: pass # Mantiene o resetta se serve
                                 if COL_COSTO in df_agg.columns: df_agg.loc[i, COL_COSTO] = "0.0"
+                                
+                                # ---> SALVATAGGIO KM FINALI NEL DATAFRAME
+                                if COL_KM_FINALI in df_agg.columns: 
+                                    df_agg.loc[i, COL_KM_FINALI] = str(km_finali_inseriti)
+                                    
                                 if nota_checkin.strip() and COL_NOTE_CHECKIN in df_agg.columns:
                                     df_agg.loc[i, COL_NOTE_CHECKIN] = nota_checkin.strip()
 
@@ -177,7 +180,7 @@ with tab_rientro:
                                 if res.status_code == 200:
                                     res_json = res.json()
                                     if res_json.get("status") in ["ok", "success"]:
-                                        st.success(f"✅ Veicolo {targa_r} rientrato correttamente ed è tornato Disponibile!")
+                                        st.success(f"✅ Veicolo {targa_r} rientrato correttamente con {km_finali_inseriti} Km registrati!")
                                         st.cache_data.clear()
                                         time.sleep(1)
                                         st.rerun()
@@ -191,7 +194,6 @@ with tab_rientro:
                             st.error(f"Errore durante il rientro del veicolo: {e}")
     else:
         st.info("Nessun dato disponibile nel sistema.")
-
 # =========================================================
 # TAB 3: STORICO & RICERCA
 # =========================================================
