@@ -534,7 +534,7 @@ with tab_registro:
 # =========================================================
 # TAB 5: NUOVO NOLEGGIO (SELEZIONE AUTO DISPONIBILE)
 # =========================================================
-with tab_nuovo:
+with tab_nuovo_noleggio:
     st.subheader("➕ Registra Nuovo Veicolo / Noleggio")
 
     with st.form("form_nuovo", clear_on_submit=True):
