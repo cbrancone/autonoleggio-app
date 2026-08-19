@@ -287,7 +287,6 @@ with tab_nuovo_cliente:
     st.subheader("👤 Registrazione Nuovo Cliente e Assegnazione Veicolo")
 
     if not df.empty:
-        # Cerca la colonna dello stato in modo flessibile
         def trova_col(keywords):
             for col in df.columns:
                 for kw in keywords:
@@ -303,19 +302,13 @@ with tab_nuovo_cliente:
 
         df_temp = df.copy()
         if c_stato and c_stato in df_temp.columns:
-            # Pulisce lo stato rimuovendo spazi e portandolo in minuscolo
             df_temp['stato_pulito'] = df_temp[c_stato].astype(str).str.strip().str.lower()
-            # Filtra cercando qualsiasi variante che significhi disponibilità
             df_disponibili = df_temp[df_temp['stato_pulito'].isin(["disponibile", "disponibili", "libera", "libero", ""])]
         else:
             df_disponibili = pd.DataFrame()
 
         if df_disponibili.empty:
             st.warning("⚠️ Al momento non ci sono veicoli con stato 'Disponibile' nel registro flotta.")
-            if c_stato in df.columns:
-                st.info(f"Stati attualmente presenti nel tuo foglio Google Sheets: {list(df[c_stato].unique())}")
-            else:
-                st.info("Colonna dello stato non trovata nel DataFrame.")
         else:
             opzioni_auto = []
             mappa_auto = {}
@@ -340,13 +333,17 @@ with tab_nuovo_cliente:
                     auto_scelta_label = st.selectbox("Seleziona Veicolo Disponibile *", opzioni_auto)
                     prezzo_default = mappa_auto[auto_scelta_label][1] if auto_scelta_label in mappa_auto else 50.0
                     prezzo_personalizzato = st.number_input("Prezzo Giornaliero Applicato (€) *", min_value=0.0, value=float(prezzo_default))
+                
                 with c2:
                     data_inizio_cli = st.date_input("Data Inizio Noleggio *", date.today())
                     data_fine_cli = st.date_input("Data Fine Noleggio *", date.today())
+                    
+                    # Nuovi campi integrati correttamente
+                    metodo_pagamento = st.selectbox("Metodo di Pagamento", ["Contanti", "Carta di Credito", "Bonifico", "Altro"])
+                    cauzione_importo = st.number_input("Cauzione / Deposito (€)", min_value=0.0, value=0.0, step=50.0)
+                    
                     stato_nuovo = st.selectbox("Stato Veicolo *", ["Noleggiata", "In Manutenzione", "Disponibile"], index=0)
                     note_cli = st.text_area("Note / Dettagli Cliente", placeholder="Eventuali annotazioni...")
-                    metodo_pagamento = st.selectbox("Metodo di Pagamento", ["Contanti", "Carta di Credito", "Bonifico", "Altro"])
-                    cauzione_importo = st.number_input("Cauzione / Deposito (€)", min_value=0.0, value=0
 
                 submit_cliente = st.form_submit_button("💾 Salva Cliente e Avvia Noleggio", type="primary")
 
@@ -373,9 +370,12 @@ with tab_nuovo_cliente:
                                 if COL_DATA_FIN in df_agg.columns: df_agg.loc[i, COL_DATA_FIN] = str(data_fine_cli)
                                 if c_prezzo in df_agg.columns: df_agg.loc[i, c_prezzo] = float(prezzo_personalizzato)
                                 if COL_COSTO in df_agg.columns: df_agg.loc[i, COL_COSTO] = float(costo_totale)
-                                if note_cli.strip() and COL_NOTE in df_agg.columns:
+                                
+                                # Salvataggio dei campi aggiuntivi nel DataFrame
                                 if COL_PAGAMENTO in df_agg.columns: df_agg.loc[i, COL_PAGAMENTO] = str(metodo_pagamento)
                                 if COL_CAUZIONE in df_agg.columns: df_agg.loc[i, COL_CAUZIONE] = float(cauzione_importo)
+                                
+                                if note_cli.strip() and COL_NOTE in df_agg.columns:
                                     df_agg.loc[i, COL_NOTE] = note_cli.strip()
 
                                 rows_payload = df_agg.fillna("").astype(str).to_dict(orient="records")
