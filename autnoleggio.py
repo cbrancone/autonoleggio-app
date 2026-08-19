@@ -32,7 +32,6 @@ COL_NOTE_CHECKIN = "Note Check-in"
 # FUNZIONE DI CARICAMENTO DATI DA GOOGLE SHEETS
 # =========================================================
 @st.cache_data(ttl=10)
-py_cache_dummy = None # Forza la freschezza dei dati se necessario
 def carica_dati():
     try:
         response = requests.get(APPS_SCRIPT_URL, timeout=15)
@@ -56,8 +55,6 @@ def formatta_date_df(df_input):
 
 # Caricamento del DataFrame globale
 df = carica_dati()
-
-st.title("🚗 Gestionale Flotta Autonoleggio")
 
 # ---------------------------------------------------------
 # DEFINIZIONE DEI TAB
