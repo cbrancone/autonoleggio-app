@@ -250,7 +250,7 @@ with tab_storico:
         st.info("Nessun dato nel registro.")
 
 # =========================================================
-# TAB 4: REGISTRO FLOTTA & GESTIONE (Modifica / Elimina)
+# TAB 4: REGISTRO FLOTTA & GESTIONE (Modifica / Elimina / Cliente)
 # =========================================================
 with tab_registro:
     st.subheader("📋 Registro Completo della Flotta & Gestione")
@@ -260,7 +260,7 @@ with tab_registro:
         st.dataframe(df, use_container_width=True)
         
         st.markdown("---")
-        st.subheader("⚙️ Modifica o Elimina Veicolo")
+        st.subheader("⚙️ Gestione Veicolo (Modifica Dati, Cliente & Eliminazione)")
         
         # Selezione del veicolo da modificare/eliminare tramite la targa
         c_targa = COL_TARGA if COL_TARGA in df.columns else "TARGA"
@@ -288,6 +288,10 @@ with tab_registro:
                         mod_anno = st.number_input("Anno", value=int(dati_v.get(COL_ANNO, 2023) or 2023))
                         mod_stato = st.selectbox("Stato", ["Disponibile", "Noleggiata", "In Manutenzione"], 
                                                  index=0 if str(dati_v.get(COL_STATO, "")).lower() == "disponibile" else 1)
+                        
+                        # ---> NUOVO CAMPO AGGIUNTO: Gestione / Modifica Cliente direttamente qui
+                        mod_cliente = st.text_input("Cliente", value=str(dati_v.get(COL_CLIENTE, "N/D")))
+                        
                         mod_note = st.text_input("Note", value=str(dati_v.get(COL_NOTE, "")))
 
                     # Pulsanti di azione all'interno del form
@@ -300,13 +304,14 @@ with tab_registro:
                             # Converte prima tutto il DataFrame in stringa in modo sicuro per evitare conflitti di tipo
                             df_mod = df.astype(str)
                             
-                            # Aggiorna i campi convertendoli esplicitamente in stringhe
+                            # Aggiorna i campi convertendoli esplicitamente in stringhe (incluso il cliente)
                             df_mod.loc[idx_orig, COL_MARCA] = str(mod_marca)
                             df_mod.loc[idx_orig, COL_MODELLO] = str(mod_modello)
                             df_mod.loc[idx_orig, COL_CATEGORIA] = str(mod_categoria)
                             df_mod.loc[idx_orig, COL_PREZZO] = str(mod_prezzo)
                             df_mod.loc[idx_orig, COL_ANNO] = str(mod_anno)
                             df_mod.loc[idx_orig, COL_STATO] = str(mod_stato)
+                            df_mod.loc[idx_orig, COL_CLIENTE] = str(mod_cliente) # <-- Salvataggio cliente
                             df_mod.loc[idx_orig, COL_NOTE] = str(mod_note)
 
                             rows_payload = df_mod.fillna("").to_dict(orient="records")
@@ -314,7 +319,7 @@ with tab_registro:
 
                             res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
                             if res.status_code == 200 and res.json().get("status") in ["ok", "success"]:
-                                st.success(f"✅ Veicolo {targa_selezionata_ges} modificato con successo!")
+                                st.success(f"✅ Veicolo {targa_selezionata_ges} e dati cliente modificati con successo!")
                                 st.cache_data.clear()
                                 time.sleep(1)
                                 st.rerun()
@@ -338,12 +343,11 @@ with tab_registro:
                             else:
                                 st.error(f"Errore durante l'eliminazione: {res.text}")
                         except Exception as e:
-                            st.error(fec:= f"Errore: {e}")
+                            st.error(f"Errore: {e}")
         else:
             st.info("Nessuna targa disponibile per la gestione.")
     else:
         st.info("Nessun dato disponibile nel registro.")
-
 # =========================================================
 # TAB 5: NUOVO VEICOLO DA AGGIUNGERE
 # =========================================================
