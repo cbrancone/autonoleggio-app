@@ -7,6 +7,9 @@ import time
 # =========================================================
 # CONFIGURAZIONE COSTANTI (Allineate esattamente al foglio)
 # =========================================================
+# Inserisci qui l'URL della tua Web App di Google Apps Script
+APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyKMhlDddoULMNfyx_1sdV_63rEofWq-U2hyzIfVs1yao-Gy5NFuH5f41WWKbJoHitT/exec"
+
 COL_TARGA = "TARGA"
 COL_MARCA = "MARCA"
 COL_MODELLO = "MODELLO"
