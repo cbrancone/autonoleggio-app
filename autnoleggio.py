@@ -297,17 +297,19 @@ with tab_registro:
 
                     if btn_modifica:
                         try:
-                            df_mod = formatta_date_df(df)
-                            # Aggiorna i campi nel DataFrame locale
-                            df_mod.loc[idx_orig, COL_MARCA] = mod_marca
-                            df_mod.loc[idx_orig, COL_MODELLO] = mod_modello
-                            df_mod.loc[idx_orig, COL_CATEGORIA] = mod_categoria
-                            df_mod.loc[idx_orig, COL_PREZZO] = float(mod_prezzo)
-                            df_mod.loc[idx_orig, COL_ANNO] = int(mod_anno)
-                            df_mod.loc[idx_orig, COL_STATO] = mod_stato
-                            df_mod.loc[idx_orig, COL_NOTE] = mod_note
+                            # Converte prima tutto il DataFrame in stringa in modo sicuro per evitare conflitti di tipo
+                            df_mod = df.astype(str)
+                            
+                            # Aggiorna i campi convertendoli esplicitamente in stringhe
+                            df_mod.loc[idx_orig, COL_MARCA] = str(mod_marca)
+                            df_mod.loc[idx_orig, COL_MODELLO] = str(mod_modello)
+                            df_mod.loc[idx_orig, COL_CATEGORIA] = str(mod_categoria)
+                            df_mod.loc[idx_orig, COL_PREZZO] = str(mod_prezzo)
+                            df_mod.loc[idx_orig, COL_ANNO] = str(mod_anno)
+                            df_mod.loc[idx_orig, COL_STATO] = str(mod_stato)
+                            df_mod.loc[idx_orig, COL_NOTE] = str(mod_note)
 
-                            rows_payload = df_mod.fillna("").astype(str).to_dict(orient="records")
+                            rows_payload = df_mod.fillna("").to_dict(orient="records")
                             payload = {"action": "update_all", "rows": rows_payload}
 
                             res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
