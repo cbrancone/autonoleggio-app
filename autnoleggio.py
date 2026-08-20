@@ -5,33 +5,26 @@ from datetime import date
 import time
 
 # =========================================================
-# CONFIGURAZIONE PAGINA & COSTANTI
+# CONFIGURAZIONE COSTANTI (Allineate esattamente al foglio)
 # =========================================================
-st.set_page_config(page_title="Gestione Autonoleggio", layout="wide")
-
-# INSERISCI QUI IL TUO URL DI GOOGLE APPS SCRIPT
-APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyKMhlDddoULMNfyx_1sdV_63rEofWq-U2hyzIfVs1yao-Gy5NFuH5f41WWKbJoHitT/exec"
-
-# Nomi standard delle colonne (devono corrispondere alle intestazioni del tuo Google Sheet)
-COL_KM_INIZIALI = "Km Iniziali"
-COL_KM_FINALI = "Km Finali"
-COL_PAGAMENTO = "Metodo Pagamento"
-COL_CAUZIONE = "Cauzione"
-COL_TARGA = "Targa"
-COL_MARCA = "Marca"
-COL_MODELLO = "Modello"
-COL_CATEGORIA = "Categoria"
-COL_PREZZO = "Prezzo"
-COL_ANNO = "Anno"
+COL_TARGA = "TARGA"
+COL_MARCA = "MARCA"
+COL_MODELLO = "MODELLO"
+COL_CATEGORIA = "CATEGORIA"
+COL_PREZZO = "PREZZO GIORNALIERO (€)"
+COL_ANNO = "Anno Immatricolazione"
 COL_CLIENTE = "Cliente"
-COL_STATO = "Stato"
-COL_DATA_INI = "Data Inizio"
-COL_DATA_FIN = "Data Fine"
+COL_STATO = "Stato Veicolo"
+COL_DATA_INI = "Data Inizio Noleggio"
+COL_DATA_FIN = "Data Fine Noleggio"
 COL_NOTE = "Note"
 COL_COSTO = "Costo Totale"
 COL_NOTE1 = "Note1"
-COL_NOTE_CHECKIN = "Note Check-in"
-
+COL_NOTE_CHECKIN = "Note Check In"
+COL_KM_INIZIALI = "KM_INIZIALI"
+COL_KM_FINALI = "KM_FINALI"
+COL_PAGAMENTO = "PAGAMENTO"
+COL_CAUZIONE = "CAUZIONE"
 # =========================================================
 # FUNZIONE DI CARICAMENTO DATI DA GOOGLE SHEETS
 # =========================================================
