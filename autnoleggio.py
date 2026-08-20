@@ -75,18 +75,22 @@ with tab_dash:
     st.subheader("📊 Panoramica Generale della Flotta")
     
     if not df.empty:
-        # Pulizia dello stato per i calcoli
+        # Pulizia dello stato per i calcoli (rende tutto minuscolo e rimuove spazi extra)
         df_dash = df.copy()
-        c_stato = COL_STATO if COL_STATO in df_dash.columns else "Stato"
-        c_categoria = COL_CATEGORIA if COL_CATEGORIA in df_dash.columns else "Categoria"
+        c_stato = COL_STATO if COL_STATO in df_dash.columns else "Stato Veicolo"
+        c_categoria = COL_CATEGORIA if COL_CATEGORIA in df_dash.columns else "CATEGORIA"
         c_costo = COL_COSTO if COL_COSTO in df_dash.columns else "Costo Totale"
         
         if c_stato in df_dash.columns:
-            df_dash['stato_p'] = df_dash[c_stato].astype(str).str.strip().str.capitalize()
+            # Normalizziamo il testo dello stato in minuscolo per un confronto sicuro
+            df_dash['stato_clean'] = df_dash[c_stato].astype(str).str.strip().str.lower()
+            
             tot_veicoli = len(df_dash)
-            disponibili = len(df_dash[df_dash['stato_p'] == "Disponibile"])
-            noleggiate = len(df_dash[df_dash['stato_p'].isin(["Noleggiata", "Noleggiato", "In Uso"])])
-            manutenzione = len(df_dash[df_dash['stato_p'].isin(["In Manutenzione", "Manutenzione"])])
+            disponibili = len(df_dash[df_dash['stato_clean'] == "disponibile"])
+            noleggiate = len(df_dash[df_dash['stato_clean'].isin(["noleggiata", "noleggiato", "in uso"])])
+            
+            # Intercetta qualsiasi variante per la manutenzione
+            manutenzione = len(df_dash[df_dash['stato_clean'].str.contains("manutenzione", na=False)])
         else:
             tot_veicoli = len(df_dash)
             disponibili = noleggiate = manutenzione = 0
@@ -115,6 +119,8 @@ with tab_dash:
         with col_g1:
             st.markdown("### 📊 Stato dei Veicoli in Flotta")
             if c_stato in df_dash.columns:
+                # Mantiene la formattazione originale pulita per il grafico
+                df_dash['stato_p'] = df_dash[c_stato].astype(str).str.strip().str.capitalize()
                 df_stati = df_dash['stato_p'].value_counts().reset_index()
                 df_stati.columns = ['Stato', 'Quantità']
                 st.bar_chart(df_stati.set_index('Stato'))
