@@ -250,14 +250,97 @@ with tab_storico:
         st.info("Nessun dato nel registro.")
 
 # =========================================================
-# TAB 4: REGISTRO FLOTTA
+# TAB 4: REGISTRO FLOTTA & GESTIONE (Modifica / Elimina)
 # =========================================================
 with tab_registro:
-    st.subheader("📋 Registro Completo della Flotta")
+    st.subheader("📋 Registro Completo della Flotta & Gestione")
+    
     if not df.empty:
+        # Mostra la tabella principale
         st.dataframe(df, use_container_width=True)
+        
+        st.markdown("---")
+        st.subheader("⚙️ Modifica o Elimina Veicolo")
+        
+        # Selezione del veicolo da modificare/eliminare tramite la targa
+        c_targa = COL_TARGA if COL_TARGA in df.columns else "TARGA"
+        targhe_disponibili = df[c_targa].astype(str).tolist() if c_targa in df.columns else []
+        
+        if targhe_disponibili:
+            targa_selezionata_ges = st.selectbox("Seleziona la Targa del veicolo da gestire", targhe_disponibili, key="sel_ges_veicolo")
+            
+            # Recupera i dati attuali del veicolo selezionato
+            riga_veicolo = df[df[c_targa].astype(str) == targa_selezionata_ges]
+            
+            if not riga_veicolo.empty:
+                idx_orig = riga_veicolo.index[0]
+                dati_v = riga_veicolo.iloc[0]
+                
+                with st.form("form_modifica_elimina"):
+                    col_m1, col_m2 = st.columns(2)
+                    with col_m1:
+                        mod_marca = st.text_input("Marca", value=str(dati_v.get(COL_MARCA, "")))
+                        mod_modello = st.text_input("Modello", value=str(dati_v.get(COL_MODELLO, "")))
+                        mod_categoria = st.text_input("Categoria", value=str(dati_v.get(COL_CATEGORIA, "")))
+                        mod_prezzo = st.number_input("Prezzo Giornaliero (€)", value=float(dati_v.get(COL_PREZZO, 50.0) or 50.0))
+                    
+                    with col_m2:
+                        mod_anno = st.number_input("Anno", value=int(dati_v.get(COL_ANNO, 2023) or 2023))
+                        mod_stato = st.selectbox("Stato", ["Disponibile", "Noleggiata", "In Manutenzione"], 
+                                                 index=0 if str(dati_v.get(COL_STATO, "")).lower() == "disponibile" else 1)
+                        mod_note = st.text_input("Note", value=str(dati_v.get(COL_NOTE, "")))
+
+                    # Pulsanti di azione all'interno del form
+                    col_btn1, col_btn2 = st.columns(2)
+                    btn_modifica = col_btn1.form_submit_button("✏️ Salva Modifiche", type="primary")
+                    btn_elimina = col_btn2.form_submit_button("🗑️ Elimina Veicolo", type="secondary")
+
+                    if btn_modifica:
+                        try:
+                            df_mod = formatta_date_df(df)
+                            # Aggiorna i campi nel DataFrame locale
+                            df_mod.loc[idx_orig, COL_MARCA] = mod_marca
+                            df_mod.loc[idx_orig, COL_MODELLO] = mod_modello
+                            df_mod.loc[idx_orig, COL_CATEGORIA] = mod_categoria
+                            df_mod.loc[idx_orig, COL_PREZZO] = float(mod_prezzo)
+                            df_mod.loc[idx_orig, COL_ANNO] = int(mod_anno)
+                            df_mod.loc[idx_orig, COL_STATO] = mod_stato
+                            df_mod.loc[idx_orig, COL_NOTE] = mod_note
+
+                            rows_payload = df_mod.fillna("").astype(str).to_dict(orient="records")
+                            payload = {"action": "update_all", "rows": rows_payload}
+
+                            res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
+                            if res.status_code == 200 and res.json().get("status") in ["ok", "success"]:
+                                st.success(f"✅ Veicolo {targa_selezionata_ges} modificato con successo!")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"Errore durante il salvataggio: {res.text}")
+                        except Exception as e:
+                            st.error(f"Errore: {e}")
+
+                    if btn_elimina:
+                        try:
+                            df_del = df.drop(idx_orig).reset_index(drop=True)
+                            rows_payload = df_del.fillna("").astype(str).to_dict(orient="records")
+                            payload = {"action": "update_all", "rows": rows_payload}
+
+                            res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
+                            if res.status_code == 200 and res.json().get("status") in ["ok", "success"]:
+                                st.success(f"🗑️ Veicolo {targa_selezionata_ges} eliminato con successo dal registro!")
+                                st.cache_data.clear()
+                                time.sleep(1)
+                                st.rerun()
+                            else:
+                                st.error(f"Errore durante l'eliminazione: {res.text}")
+                        except Exception as e:
+                            st.error(fec:= f"Errore: {e}")
+        else:
+            st.info("Nessuna targa disponibile per la gestione.")
     else:
-        st.info("Nessun dato disponibile.")
+        st.info("Nessun dato disponibile nel registro.")
 
 # =========================================================
 # TAB 5: NUOVO VEICOLO DA AGGIUNGERE
