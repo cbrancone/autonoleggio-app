@@ -7,7 +7,6 @@ import time
 # =========================================================
 # CONFIGURAZIONE COSTANTI (Allineate esattamente al foglio)
 # =========================================================
-# Inserisci qui l'URL della tua Web App di Google Apps Script
 APPS_SCRIPT_URL = "https://script.google.com/macros/s/AKfycbyKMhlDddoULMNfyx_1sdV_63rEofWq-U2hyzIfVs1yao-Gy5NFuH5f41WWKbJoHitT/exec"
 
 COL_TARGA = "TARGA"
@@ -28,6 +27,7 @@ COL_KM_INIZIALI = "KM_INIZIALI"
 COL_KM_FINALI = "KM_FINALI"
 COL_PAGAMENTO = "PAGAMENTO"
 COL_CAUZIONE = "CAUZIONE"
+
 # =========================================================
 # FUNZIONE DI CARICAMENTO DATI DA GOOGLE SHEETS
 # =========================================================
@@ -40,7 +40,8 @@ def carica_dati():
             if len(data) > 1:
                 headers = data[0]
                 rows = data[1:]
-                df = pd.DataFrame(rows, columns=headers)
+                # FORZHIAMO IL DTYPE A OBJECT PER EVITARE BLOCCHI CON I NUMERI
+                df = pd.DataFrame(rows, columns=headers).astype(object)
                 return df
     except Exception as e:
         st.error(f"Errore di connessione a Google Sheets: {e}")
@@ -75,27 +76,22 @@ with tab_dash:
     st.subheader("📊 Panoramica Generale della Flotta")
     
     if not df.empty:
-        # Pulizia dello stato per i calcoli (rende tutto minuscolo e rimuove spazi extra)
         df_dash = df.copy()
         c_stato = COL_STATO if COL_STATO in df_dash.columns else "Stato Veicolo"
         c_categoria = COL_CATEGORIA if COL_CATEGORIA in df_dash.columns else "CATEGORIA"
         c_costo = COL_COSTO if COL_COSTO in df_dash.columns else "Costo Totale"
         
         if c_stato in df_dash.columns:
-            # Normalizziamo il testo dello stato in minuscolo per un confronto sicuro
             df_dash['stato_clean'] = df_dash[c_stato].astype(str).str.strip().str.lower()
             
             tot_veicoli = len(df_dash)
             disponibili = len(df_dash[df_dash['stato_clean'] == "disponibile"])
             noleggiate = len(df_dash[df_dash['stato_clean'].isin(["noleggiata", "noleggiato", "in uso"])])
-            
-            # Intercetta qualsiasi variante per la manutenzione
             manutenzione = len(df_dash[df_dash['stato_clean'].str.contains("manutenzione", na=False)])
         else:
             tot_veicoli = len(df_dash)
             disponibili = noleggiate = manutenzione = 0
 
-        # Calcolo del fatturato totale stimato dai noleggi attivi
         fatturato_totale = 0.0
         if c_costo in df_dash.columns:
             try:
@@ -103,7 +99,6 @@ with tab_dash:
             except:
                 fatturato_totale = 0.0
 
-        # Mostra le metriche principali in alto
         col1, col2, col3, col4, col5 = st.columns(5)
         col1.metric("🚗 Totale Veicoli", tot_veicoli)
         col2.metric("🟢 Disponibili", disponibili)
@@ -113,13 +108,11 @@ with tab_dash:
 
         st.markdown("---")
 
-        # Visualizzazioni grafiche dettagliate con Streamlit
         col_g1, col_g2 = st.columns(2)
 
         with col_g1:
             st.markdown("### 📊 Stato dei Veicoli in Flotta")
             if c_stato in df_dash.columns:
-                # Mantiene la formattazione originale pulita per il grafico
                 df_dash['stato_p'] = df_dash[c_stato].astype(str).str.strip().str.capitalize()
                 df_stati = df_dash['stato_p'].value_counts().reset_index()
                 df_stati.columns = ['Stato', 'Quantità']
@@ -139,7 +132,7 @@ with tab_dash:
         st.info("Nessun dato statistico disponibile nel sistema.")
 
 # =========================================================
-# TAB 2: RIENTRO VEICOLO (Aggiornato con Km Finali)
+# TAB 2: RIENTRO VEICOLO
 # =========================================================
 with tab_rientro:
     st.subheader("🔑 Gestione Rientro Veicolo")
@@ -183,10 +176,7 @@ with tab_rientro:
 
             with st.form("form_rientro"):
                 auto_sel = st.selectbox("Seleziona Veicolo in Rientro *", opzioni_rientro)
-                
-                # ---> NUOVO CAMPO: Km Finali nel form di rientro
                 km_finali_inseriti = st.number_input("Km Finali alla Consegna *", min_value=0, value=0, step=100)
-                
                 nota_checkin = st.text_area("Note Check-in / Condizioni Veicolo", placeholder="es. Condizioni ottime...")
                 submit_rientro = st.form_submit_button("🔄 Conferma Rientro Veicolo", type="primary")
 
@@ -202,16 +192,14 @@ with tab_rientro:
                             if len(idx_matches) > 0:
                                 i = idx_matches[0]
                                 
-                                # Aggiornamento dei campi nel DataFrame
                                 if c_stato: df_agg.loc[i, c_stato] = "Disponibile"
                                 if c_cliente: df_agg.loc[i, c_cliente] = "N/D"
                                 if COL_DATA_INI in df_agg.columns: df_agg.loc[i, COL_DATA_INI] = ""
                                 if COL_DATA_FIN in df_agg.columns: df_agg.loc[i, COL_DATA_FIN] = ""
-                                if COL_COSTO in df_agg.columns: df_agg.loc[i, COL_COSTO] = "0.0"
+                                if COL_COSTO in df_agg.columns: df_agg.loc[i, COL_COSTO] = 0.0
                                 
-                                # ---> SALVATAGGIO KM FINALI NEL DATAFRAME
                                 if COL_KM_FINALI in df_agg.columns: 
-                                    df_agg.loc[i, COL_KM_FINALI] = str(km_finali_inseriti)
+                                    df_agg.loc[i, COL_KM_FINALI] = km_finali_inseriti
                                     
                                 if nota_checkin.strip() and COL_NOTE_CHECKIN in df_agg.columns:
                                     df_agg.loc[i, COL_NOTE_CHECKIN] = nota_checkin.strip()
@@ -240,6 +228,7 @@ with tab_rientro:
                             st.error(f"Errore durante il rientro del veicolo: {e}")
     else:
         st.info("Nessun dato disponibile nel sistema.")
+
 # =========================================================
 # TAB 3: STORICO & RICERCA
 # =========================================================
@@ -256,26 +245,23 @@ with tab_storico:
         st.info("Nessun dato nel registro.")
 
 # =========================================================
-# TAB 4: REGISTRO FLOTTA & GESTIONE (Modifica / Elimina / Cliente)
+# TAB 4: REGISTRO FLOTTA & GESTIONE
 # =========================================================
 with tab_registro:
     st.subheader("📋 Registro Completo della Flotta & Gestione")
     
     if not df.empty:
-        # Mostra la tabella principale
         st.dataframe(df, use_container_width=True)
         
         st.markdown("---")
         st.subheader("⚙️ Gestione Veicolo (Modifica Dati, Cliente & Eliminazione)")
         
-        # Selezione del veicolo da modificare/eliminare tramite la targa
         c_targa = COL_TARGA if COL_TARGA in df.columns else "TARGA"
         targhe_disponibili = df[c_targa].astype(str).tolist() if c_targa in df.columns else []
         
         if targhe_disponibili:
             targa_selezionata_ges = st.selectbox("Seleziona la Targa del veicolo da gestire", targhe_disponibili, key="sel_ges_veicolo")
             
-            # Recupera i dati attuali del veicolo selezionato
             riga_veicolo = df[df[c_targa].astype(str) == targa_selezionata_ges]
             
             if not riga_veicolo.empty:
@@ -293,34 +279,27 @@ with tab_registro:
                     with col_m2:
                         mod_anno = st.number_input("Anno", value=int(dati_v.get(COL_ANNO, 2023) or 2023))
                         mod_stato = st.selectbox("Stato", ["Disponibile", "Noleggiata", "In Manutenzione"], 
-                                                 index=0 if str(dati_v.get(COL_STATO, "")).lower() == "disponibile" else 1)
-                        
-                        # ---> NUOVO CAMPO AGGIUNTO: Gestione / Modifica Cliente direttamente qui
+                                               index=0 if str(dati_v.get(COL_STATO, "")).lower() == "disponibile" else 1)
                         mod_cliente = st.text_input("Cliente", value=str(dati_v.get(COL_CLIENTE, "N/D")))
-                        
                         mod_note = st.text_input("Note", value=str(dati_v.get(COL_NOTE, "")))
 
-                    # Pulsanti di azione all'interno del form
                     col_btn1, col_btn2 = st.columns(2)
                     btn_modifica = col_btn1.form_submit_button("✏️ Salva Modifiche", type="primary")
                     btn_elimina = col_btn2.form_submit_button("🗑️ Elimina Veicolo", type="secondary")
 
                     if btn_modifica:
                         try:
-                            # Converte prima tutto il DataFrame in stringa in modo sicuro per evitare conflitti di tipo
-                            df_mod = df.astype(str)
-                            
-                            # Aggiorna i campi convertendoli esplicitamente in stringhe (incluso il cliente)
+                            df_mod = df.copy()
                             df_mod.loc[idx_orig, COL_MARCA] = str(mod_marca)
                             df_mod.loc[idx_orig, COL_MODELLO] = str(mod_modello)
                             df_mod.loc[idx_orig, COL_CATEGORIA] = str(mod_categoria)
-                            df_mod.loc[idx_orig, COL_PREZZO] = str(mod_prezzo)
-                            df_mod.loc[idx_orig, COL_ANNO] = str(mod_anno)
+                            df_mod.loc[idx_orig, COL_PREZZO] = float(mod_prezzo)
+                            df_mod.loc[idx_orig, COL_ANNO] = int(mod_anno)
                             df_mod.loc[idx_orig, COL_STATO] = str(mod_stato)
-                            df_mod.loc[idx_orig, COL_CLIENTE] = str(mod_cliente) # <-- Salvataggio cliente
+                            df_mod.loc[idx_orig, COL_CLIENTE] = str(mod_cliente)
                             df_mod.loc[idx_orig, COL_NOTE] = str(mod_note)
 
-                            rows_payload = df_mod.fillna("").to_dict(orient="records")
+                            rows_payload = df_mod.fillna("").astype(str).to_dict(orient="records")
                             payload = {"action": "update_all", "rows": rows_payload}
 
                             res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
@@ -354,6 +333,7 @@ with tab_registro:
             st.info("Nessuna targa disponibile per la gestione.")
     else:
         st.info("Nessun dato disponibile nel registro.")
+
 # =========================================================
 # TAB 5: NUOVO VEICOLO DA AGGIUNGERE
 # =========================================================
@@ -363,7 +343,6 @@ with tab_nuovo_veicolo:
     with st.form("form_nuovo_veicolo", clear_on_submit=True):
         c1, c2 = st.columns(2)
         with c1:
-           
             targa = st.text_input(f"{COL_TARGA} *").upper()
             marca = st.text_input(f"{COL_MARCA} *")
             modello = st.text_input(f"{COL_MODELLO} *")
@@ -473,7 +452,6 @@ with tab_nuovo_cliente:
                     data_inizio_cli = st.date_input("Data Inizio Noleggio *", date.today())
                     data_fine_cli = st.date_input("Data Fine Noleggio *", date.today())
                     
-                    # Nuovi campi integrati correttamente
                     metodo_pagamento = st.selectbox("Metodo di Pagamento", ["Contanti", "Carta di Credito", "Bonifico", "Altro"])
                     cauzione_importo = st.number_input("Cauzione / Deposito (€)", min_value=0.0, value=0.0, step=50.0)
                     
@@ -506,7 +484,6 @@ with tab_nuovo_cliente:
                                 if c_prezzo in df_agg.columns: df_agg.loc[i, c_prezzo] = float(prezzo_personalizzato)
                                 if COL_COSTO in df_agg.columns: df_agg.loc[i, COL_COSTO] = float(costo_totale)
                                 
-                                # Salvataggio dei campi aggiuntivi nel DataFrame
                                 if COL_PAGAMENTO in df_agg.columns: df_agg.loc[i, COL_PAGAMENTO] = str(metodo_pagamento)
                                 if COL_CAUZIONE in df_agg.columns: df_agg.loc[i, COL_CAUZIONE] = float(cauzione_importo)
                                 
