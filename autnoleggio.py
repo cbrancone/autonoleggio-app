@@ -423,7 +423,73 @@ with tab_nuovo_veicolo:
                 except Exception as e:
                     st.error(f"Errore di connessione: {e}")
 
-if submit_cliente:
+# =========================================================
+# TAB 6: INSERISCI NUOVO CLIENTE & ASSEGNAZIONE VEICOLO
+# =========================================================
+with tab_nuovo_cliente:
+    st.subheader("👤 Registrazione Nuovo Cliente e Assegnazione Veicolo")
+
+    if not df.empty:
+        def trova_col(keywords):
+            for col in df.columns:
+                for kw in keywords:
+                    if kw.lower() in str(col).lower():
+                        return col
+            return None
+
+        c_stato = COL_STATO if COL_STATO in df.columns else trova_col(["stato"])
+        c_targa = COL_TARGA if COL_TARGA in df.columns else trova_col(["targa"])
+        c_marca = COL_MARCA if COL_MARCA in df.columns else trova_col(["marca"])
+        c_modello = COL_MODELLO if COL_MODELLO in df.columns else trova_col(["modello"])
+        c_prezzo = COL_PREZZO if COL_PREZZO in df.columns else trova_col(["prezzo"])
+
+        df_temp = df.copy()
+        if c_stato and c_stato in df_temp.columns:
+            df_temp['stato_pulito'] = df_temp[c_stato].astype(str).str.strip().str.lower()
+            df_disponibili = df_temp[df_temp['stato_pulito'].isin(["disponibile", "disponibili", "libera", "libero", ""])]
+        else:
+            df_disponibili = pd.DataFrame()
+
+        if df_disponibili.empty:
+            st.warning("⚠️ Al momento non ci sono veicoli con stato 'Disponibile' nel registro flotta.")
+        else:
+            opzioni_auto = []
+            mappa_auto = {}
+            for idx, r in df_disponibili.iterrows():
+                t = str(r.get(c_targa, ''))
+                m = str(r.get(c_marca, ''))
+                mod = str(r.get(c_modello, ''))
+                p = r.get(c_prezzo, 0.0)
+                
+                label = f"{t} - {m} {mod} (Prezzo base: €{p}/giorno)"
+                opzioni_auto.append(label)
+                try:
+                    p_val = float(p) if pd.notna(p) and str(p) != '' else 50.0
+                except:
+                    p_val = 50.0
+                mappa_auto[label] = (t, p_val)
+
+            with st.form("form_nuovo_cliente", clear_on_submit=True):
+                c1, c2 = st.columns(2)
+                with c1:
+                    nome_cliente = st.text_input("Nome e Cognome Cliente *", placeholder="es. Mario Rossi")
+                    auto_scelta_label = st.selectbox("Seleziona Veicolo Disponibile *", opzioni_auto)
+                    prezzo_default = mappa_auto[auto_scelta_label][1] if auto_scelta_label in mappa_auto else 50.0
+                    prezzo_personalizzato = st.number_input("Prezzo Giornaliero Applicato (€) *", min_value=0.0, value=float(prezzo_default))
+                
+                with c2:
+                    data_inizio_cli = st.date_input("Data Inizio Noleggio *", date.today())
+                    data_fine_cli = st.date_input("Data Fine Noleggio *", date.today())
+                    
+                    metodo_pagamento = st.selectbox("Metodo di Pagamento", ["Contanti", "Carta di Credito", "Bonifico", "Altro"])
+                    cauzione_importo = st.number_input("Cauzione / Deposito (€)", min_value=0.0, value=0.0, step=50.0)
+                    
+                    stato_nuovo = st.selectbox("Stato Veicolo *", ["Noleggiata", "In Manutenzione", "Disponibile"], index=0)
+                    note_cli = st.text_area("Note / Dettagli Cliente", placeholder="Eventuali annotazioni...")
+
+                submit_cliente = st.form_submit_button("💾 Salva Cliente e Avvia Noleggio", type="primary")
+
+                if submit_cliente:
                     if not nome_cliente.strip():
                         st.error("Inserisci il nome e cognome del cliente.")
                     elif not auto_scelta_label:
@@ -431,7 +497,6 @@ if submit_cliente:
                     else:
                         targa_selezionata = mappa_auto.get(auto_scelta_label)[0]
                         try:
-                            # Recuperiamo i dati fissi del veicolo selezionato per portarli nel nuovo record di noleggio
                             riga_veicolo_orig = df[df[c_targa].astype(str) == targa_selezionata]
                             
                             if not riga_veicolo_orig.empty:
@@ -440,7 +505,6 @@ if submit_cliente:
                                 giorni = 1 if giorni < 1 else giorni
                                 costo_totale = giorni * prezzo_personalizzato
 
-                                # Prepariamo un NUOVO record completo da aggiungere in fondo al foglio
                                 payload = {
                                     "action": "append",
                                     COL_TARGA: str(targa_selezionata),
