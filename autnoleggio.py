@@ -423,73 +423,7 @@ with tab_nuovo_veicolo:
                 except Exception as e:
                     st.error(f"Errore di connessione: {e}")
 
-# =========================================================
-# TAB 6: INSERISCI NUOVO CLIENTE & ASSEGNAZIONE VEICOLO
-# =========================================================
-with tab_nuovo_cliente:
-    st.subheader("👤 Registrazione Nuovo Cliente e Assegnazione Veicolo")
-
-    if not df.empty:
-        def trova_col(keywords):
-            for col in df.columns:
-                for kw in keywords:
-                    if kw.lower() in str(col).lower():
-                        return col
-            return None
-
-        c_stato = COL_STATO if COL_STATO in df.columns else trova_col(["stato"])
-        c_targa = COL_TARGA if COL_TARGA in df.columns else trova_col(["targa"])
-        c_marca = COL_MARCA if COL_MARCA in df.columns else trova_col(["marca"])
-        c_modello = COL_MODELLO if COL_MODELLO in df.columns else trova_col(["modello"])
-        c_prezzo = COL_PREZZO if COL_PREZZO in df.columns else trova_col(["prezzo"])
-
-        df_temp = df.copy()
-        if c_stato and c_stato in df_temp.columns:
-            df_temp['stato_pulito'] = df_temp[c_stato].astype(str).str.strip().str.lower()
-            df_disponibili = df_temp[df_temp['stato_pulito'].isin(["disponibile", "disponibili", "libera", "libero", ""])]
-        else:
-            df_disponibili = pd.DataFrame()
-
-        if df_disponibili.empty:
-            st.warning("⚠️ Al momento non ci sono veicoli con stato 'Disponibile' nel registro flotta.")
-        else:
-            opzioni_auto = []
-            mappa_auto = {}
-            for idx, r in df_disponibili.iterrows():
-                t = str(r.get(c_targa, ''))
-                m = str(r.get(c_marca, ''))
-                mod = str(r.get(c_modello, ''))
-                p = r.get(c_prezzo, 0.0)
-                
-                label = f"{t} - {m} {mod} (Prezzo base: €{p}/giorno)"
-                opzioni_auto.append(label)
-                try:
-                    p_val = float(p) if pd.notna(p) and str(p) != '' else 50.0
-                except:
-                    p_val = 50.0
-                mappa_auto[label] = (t, p_val)
-
-            with st.form("form_nuovo_cliente", clear_on_submit=True):
-                c1, c2 = st.columns(2)
-                with c1:
-                    nome_cliente = st.text_input("Nome e Cognome Cliente *", placeholder="es. Mario Rossi")
-                    auto_scelta_label = st.selectbox("Seleziona Veicolo Disponibile *", opzioni_auto)
-                    prezzo_default = mappa_auto[auto_scelta_label][1] if auto_scelta_label in mappa_auto else 50.0
-                    prezzo_personalizzato = st.number_input("Prezzo Giornaliero Applicato (€) *", min_value=0.0, value=float(prezzo_default))
-                
-                with c2:
-                    data_inizio_cli = st.date_input("Data Inizio Noleggio *", date.today())
-                    data_fine_cli = st.date_input("Data Fine Noleggio *", date.today())
-                    
-                    metodo_pagamento = st.selectbox("Metodo di Pagamento", ["Contanti", "Carta di Credito", "Bonifico", "Altro"])
-                    cauzione_importo = st.number_input("Cauzione / Deposito (€)", min_value=0.0, value=0.0, step=50.0)
-                    
-                    stato_nuovo = st.selectbox("Stato Veicolo *", ["Noleggiata", "In Manutenzione", "Disponibile"], index=0)
-                    note_cli = st.text_area("Note / Dettagli Cliente", placeholder="Eventuali annotazioni...")
-
-                submit_cliente = st.form_submit_button("💾 Salva Cliente e Avvia Noleggio", type="primary")
-
-                if submit_cliente:
+if submit_cliente:
                     if not nome_cliente.strip():
                         st.error("Inserisci il nome e cognome del cliente.")
                     elif not auto_scelta_label:
@@ -497,39 +431,43 @@ with tab_nuovo_cliente:
                     else:
                         targa_selezionata = mappa_auto.get(auto_scelta_label)[0]
                         try:
-                            df_agg = formatta_date_df(df)
-                            idx_matches = df_agg[df_agg[c_targa] == targa_selezionata].index
-
-                            if len(idx_matches) > 0:
-                                i = idx_matches[0]
+                            # Recuperiamo i dati fissi del veicolo selezionato per portarli nel nuovo record di noleggio
+                            riga_veicolo_orig = df[df[c_targa].astype(str) == targa_selezionata]
+                            
+                            if not riga_veicolo_orig.empty:
+                                dati_base = riga_veicolo_orig.iloc[0]
                                 giorni = (data_fine_cli - data_inizio_cli).days
                                 giorni = 1 if giorni < 1 else giorni
                                 costo_totale = giorni * prezzo_personalizzato
 
-                                if c_stato: df_agg.loc[i, c_stato] = str(stato_nuovo)
-                                if COL_CLIENTE in df_agg.columns: df_agg.loc[i, COL_CLIENTE] = nome_cliente.strip()
-                                if COL_DATA_INI in df_agg.columns: df_agg.loc[i, COL_DATA_INI] = str(data_inizio_cli)
-                                if COL_DATA_FIN in df_agg.columns: df_agg.loc[i, COL_DATA_FIN] = str(data_fine_cli)
-                                if c_prezzo in df_agg.columns: df_agg.loc[i, c_prezzo] = float(prezzo_personalizzato)
-                                if COL_COSTO in df_agg.columns: df_agg.loc[i, COL_COSTO] = float(costo_totale)
-                                
-                                if COL_PAGAMENTO in df_agg.columns: df_agg.loc[i, COL_PAGAMENTO] = str(metodo_pagamento)
-                                if COL_CAUZIONE in df_agg.columns: df_agg.loc[i, COL_CAUZIONE] = float(cauzione_importo)
-                                
-                                if note_cli.strip() and COL_NOTE in df_agg.columns:
-                                    df_agg.loc[i, COL_NOTE] = note_cli.strip()
-
-                                rows_payload = df_agg.fillna("").astype(str).to_dict(orient="records")
+                                # Prepariamo un NUOVO record completo da aggiungere in fondo al foglio
                                 payload = {
-                                    "action": "update_all",
-                                    "rows": rows_payload,
+                                    "action": "append",
+                                    COL_TARGA: str(targa_selezionata),
+                                    COL_MARCA: str(dati_base.get(COL_MARCA, "")),
+                                    COL_MODELLO: str(dati_base.get(COL_MODELLO, "")),
+                                    COL_CATEGORIA: str(dati_base.get(COL_CATEGORIA, "")),
+                                    COL_PREZZO: str(prezzo_personalizzato),
+                                    COL_ANNO: str(dati_base.get(COL_ANNO, "")),
+                                    COL_CLIENTE: nome_cliente.strip(),
+                                    COL_STATO: str(stato_nuovo),
+                                    COL_DATA_INI: str(data_inizio_cli),
+                                    COL_DATA_FIN: str(data_fine_cli),
+                                    COL_COSTO: str(costo_totale),
+                                    COL_KM_INIZIALI: str(dati_base.get(COL_KM_INIZIALI, "0")),
+                                    COL_KM_FINALI: "",
+                                    COL_PAGAMENTO: str(metodo_pagamento),
+                                    COL_CAUZIONE: str(cauzione_importo),
+                                    COL_NOTE: note_cli.strip() if note_cli.strip() else "",
+                                    COL_NOTE1: str(dati_base.get(COL_NOTE1, "")),
+                                    COL_NOTE_CHECKIN: "",
                                 }
 
                                 res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
                                 if res.status_code == 200:
                                     res_json = res.json()
                                     if res_json.get("status") in ["ok", "success"]:
-                                        st.success(f"✅ Cliente {nome_cliente} registrato e veicolo {targa_selezionata} aggiornato con successo!")
+                                        st.success(f"✅ Nuovo noleggio registrato con successo per {nome_cliente} (Veicolo {targa_selezionata})!")
                                         st.cache_data.clear()
                                         time.sleep(1)
                                         st.rerun()
