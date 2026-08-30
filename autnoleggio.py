@@ -245,23 +245,52 @@ with tab_storico:
         st.info("Nessun dato nel registro.")
 
 # =========================================================
-# TAB 4: REGISTRO FLOTTA & GESTIONE
+# TAB 4: REGISTRO FLOTTA & GESTIONE (Modifica / Elimina / Cliente)
 # =========================================================
 with tab_registro:
     st.subheader("📋 Registro Completo della Flotta & Gestione")
     
     if not df.empty:
-        st.dataframe(df, use_container_width=True)
+        # ---> NUOVO: Filtro rapido per stato della flotta
+        c_stato_reg = COL_STATO if COL_STATO in df.columns else "Stato Veicolo"
+        
+        if c_stato_reg in df.columns:
+            st.markdown("### 🔍 Filtra Flotta per Stato")
+            filtro_stato = st.radio(
+                "Mostra:",
+                ["Tutti i veicoli", "🟢 Solo Disponibili", "🔵 Solo Noleggiate", "🟠 Solo in Manutenzione"],
+                horizontal=True
+            )
+            
+            df_reg_view = df.copy()
+            df_reg_view['stato_c'] = df_reg_view[c_stato_reg].astype(str).str.strip().str.lower()
+            
+            if filtro_stato == "🟢 Solo Disponibili":
+                df_reg_view = df_reg_view[df_reg_view['stato_c'] == "disponibile"]
+            elif filtro_stato == "🔵 Solo Noleggiate":
+                df_reg_view = df_reg_view[df_reg_view['stato_c'].isin(["noleggiata", "noleggiato", "in uso"])]
+            elif filtro_stato == "🟠 Solo in Manutenzione":
+                df_reg_view = df_reg_view[df_reg_view['stato_c'].str.contains("manutenzione", na=False)]
+                
+            # Rimuoviamo la colonna d'appoggio temporanea prima di mostrarla
+            if 'stato_c' in df_reg_view.columns:
+                df_reg_view = df_reg_view.drop(columns=['stato_c'])
+                
+            st.dataframe(df_reg_view, use_container_width=True)
+        else:
+            st.dataframe(df, use_container_width=True)
         
         st.markdown("---")
         st.subheader("⚙️ Gestione Veicolo (Modifica Dati, Cliente & Eliminazione)")
         
+        # Selezione del veicolo da modificare/eliminare tramite la targa
         c_targa = COL_TARGA if COL_TARGA in df.columns else "TARGA"
         targhe_disponibili = df[c_targa].astype(str).tolist() if c_targa in df.columns else []
         
         if targhe_disponibili:
             targa_selezionata_ges = st.selectbox("Seleziona la Targa del veicolo da gestire", targhe_disponibili, key="sel_ges_veicolo")
             
+            # Recupera i dati attuali del veicolo selezionato
             riga_veicolo = df[df[c_targa].astype(str) == targa_selezionata_ges]
             
             if not riga_veicolo.empty:
@@ -317,7 +346,7 @@ with tab_registro:
                         try:
                             df_del = df.drop(idx_orig).reset_index(drop=True)
                             rows_payload = df_del.fillna("").astype(str).to_dict(orient="records")
-                            payload = {"action": "update_all", "rows": rows_payload}
+                            payload = {"action=":"update_all", "rows": rows_payload}
 
                             res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
                             if res.status_code == 200 and res.json().get("status") in ["ok", "success"]:
