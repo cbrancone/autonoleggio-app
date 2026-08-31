@@ -506,27 +506,29 @@ with tab_nuovo_cliente:
                                 giorni = 1 if giorni < 1 else giorni
                                 costo_totale = giorni * prezzo_personalizzato
 
-                                payload = {
-                                    "action": "append",
-                                    COL_TARGA: str(targa_selezionata),
-                                    COL_MARCA: str(dati_base.get(COL_MARCA, "")),
-                                    COL_MODELLO: str(dati_base.get(COL_MODELLO, "")),
-                                    COL_CATEGORIA: str(dati_base.get(COL_CATEGORIA, "")),
-                                    COL_PREZZO: str(prezzo_personalizzato),
-                                    COL_ANNO: str(dati_base.get(COL_ANNO, "")),
-                                    COL_CLIENTE: nome_cliente.strip(),
-                                    COL_STATO: str(stato_nuovo),
-                                    COL_DATA_INI: str(data_inizio_cli),
-                                    COL_DATA_FIN: str(data_fine_cli),
-                                    COL_COSTO: str(costo_totale),
-                                    COL_KM_INIZIALI: str(dati_base.get(COL_KM_INIZIALI, "0")),
-                                    COL_KM_FINALI: "",
-                                    COL_PAGAMENTO: str(metodo_pagamento),
-                                    COL_CAUZIONE: str(cauzione_importo),
-                                    COL_NOTE: note_cli.strip() if note_cli.strip() else "",
-                                    COL_NOTE1: str(dati_base.get(COL_NOTE1, "")),
-                                    COL_NOTE_CHECKIN: "",
-                                }
+                              payload = {
+    "action": "append",
+    "row_data": [
+        str(targa_selezionata),                    # 1. TARGA
+        str(dati_base.get(COL_MARCA, "")),         # 2. MARCA
+        str(dati_base.get(COL_MODELLO, "")),       # 3. MODELLO
+        str(dati_base.get(COL_CATEGORIA, "")),     # 4. CATEGORIA
+        str(prezzo_personalizzato),                # 5. PREZZO
+        str(dati_base.get(COL_ANNO, "")),          # 6. ANNO
+        nome_cliente.strip(),                      # 7. CLIENTE
+        str(stato_nuovo),                          # 8. STATO
+        str(data_inizio_cli),                      # 9. DATA INIZIO
+        str(data_fine_cli),                        # 10. DATA FINE
+        str(costo_totale),                         # 11. COSTO / IMPORTO
+        str(dati_base.get(COL_KM_INIZIALI, "0")),  # 12. KM INIZIALI
+        "",                                        # 13. KM FINALI
+        str(metodo_pagamento),                     # 14. PAGAMENTO
+        str(cauzione_importo),                     # 15. CAUZIONE
+        note_cli.strip() if note_cli.strip() else "", # 16. NOTE
+        str(dati_base.get(COL_NOTE1, "")),         # 17. NOTE1
+        ""                                         # 18. NOTE CHECK-IN
+    ]
+}
 
                                 res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
                                 if res.status_code == 200:
@@ -580,29 +582,31 @@ with tab_contabilita:
             else:
                 # Per le spese usiamo un valore negativo, per le entrate positivo
                 segno = -1 if tipo_movimento == "Spesa (Uscita)" else 1
-                importo_finale = importo_mov * segno
-                
-                payload = {
-                    "action": "append",
-                    COL_TARGA: riferimento_targa.upper() if riferimento_targa else "EXTRA",
-                    COL_MARCA: tipo_movimento,
-                    COL_MODELLO: categoria_mov,
-                    COL_CATEGORIA: "Contabilità",
-                    COL_PREZZO: str(importo_finale),
-                    COL_ANNO: str(data_mov.year),
-                    COL_CLIENTE: descrizione_mov.strip(),
-                    COL_STATO: "Registrato",
-                    COL_DATA_INI: str(data_mov),
-                    COL_DATA_FIN: str(data_mov),
-                    COL_COSTO: str(importo_finale),
-                    COL_KM_INIZIALI: "0",
-                    COL_KM_FINALI: "0",
-                    COL_PAGAMENTO: "N/D",
-                    COL_CAUZIONE: "0.0",
-                    COL_NOTE: descrizione_mov.strip(),
-                    COL_NOTE1: "",
-                    COL_NOTE_CHECKIN: "",
-                }
+importo_finale = importo_mov * segno
+
+payload = {
+    "action": "append",
+    "row_data": [
+        riferimento_targa.upper() if riferimento_targa else "EXTRA", # 1. TARGA
+        tipo_movimento,                                             # 2. MARCA (o usa una colonna dedicata)
+        categoria_mov,                                              # 3. MODELLO (o categoria spesa)
+        "Contabilità",                                              # 4. CATEGORIA
+        str(importo_mov),                                           # 5. PREZZO / IMPORTO BASE
+        str(data_mov.year),                                         # 6. ANNO
+        descrizione_mov.strip(),                                    # 7. CLIENTE (usato qui come descrizione)
+        "Registrato",                                               # 8. STATO
+        str(data_mov),                                              # 9. DATA INIZIO
+        str(data_mov),                                              # 10. DATA FINE
+        str(importo_finale),                                        # 11. COSTO / IMPORTO FINALE (positivo o negativo)
+        "0",                                                        # 12. KM INIZIALI
+        "0",                                                        # 13. KM FINALI
+        "N/D",                                                      # 14. PAGAMENTO
+        "0.0",                                                      # 15. CAUZIONE
+        descrizione_mov.strip(),                                    # 16. NOTE
+        "",                                                         # 17. NOTE1
+        ""                                                          # 18. NOTE CHECK-IN
+    ]
+}
                 try:
                     res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
                     if res.status_code == 200:
