@@ -506,29 +506,29 @@ with tab_nuovo_cliente:
                                 giorni = 1 if giorni < 1 else giorni
                                 costo_totale = giorni * prezzo_personalizzato
 
-                              payload = {
-    "action": "append",
-    "row_data": [
-        str(targa_selezionata),                    # 1. TARGA
-        str(dati_base.get(COL_MARCA, "")),         # 2. MARCA
-        str(dati_base.get(COL_MODELLO, "")),       # 3. MODELLO
-        str(dati_base.get(COL_CATEGORIA, "")),     # 4. CATEGORIA
-        str(prezzo_personalizzato),                # 5. PREZZO
-        str(dati_base.get(COL_ANNO, "")),          # 6. ANNO
-        nome_cliente.strip(),                      # 7. CLIENTE
-        str(stato_nuovo),                          # 8. STATO
-        str(data_inizio_cli),                      # 9. DATA INIZIO
-        str(data_fine_cli),                        # 10. DATA FINE
-        str(costo_totale),                         # 11. COSTO / IMPORTO
-        str(dati_base.get(COL_KM_INIZIALI, "0")),  # 12. KM INIZIALI
-        "",                                        # 13. KM FINALI
-        str(metodo_pagamento),                     # 14. PAGAMENTO
-        str(cauzione_importo),                     # 15. CAUZIONE
-        note_cli.strip() if note_cli.strip() else "", # 16. NOTE
-        str(dati_base.get(COL_NOTE1, "")),         # 17. NOTE1
-        ""                                         # 18. NOTE CHECK-IN
-    ]
-}
+                                payload = {
+                                    "action": "append",
+                                    "row_data": [
+                                        str(targa_selezionata),
+                                        str(dati_base.get(COL_MARCA, "")),
+                                        str(dati_base.get(COL_MODELLO, "")),
+                                        str(dati_base.get(COL_CATEGORIA, "")),
+                                        str(prezzo_personalizzato),
+                                        str(dati_base.get(COL_ANNO, "")),
+                                        nome_cliente.strip(),
+                                        str(stato_nuovo),
+                                        str(data_inizio_cli),
+                                        str(data_fine_cli),
+                                        str(costo_totale),
+                                        str(dati_base.get(COL_KM_INIZIALI, "0")),
+                                        "",
+                                        str(metodo_pagamento),
+                                        str(cauzione_importo),
+                                        note_cli.strip() if note_cli.strip() else "",
+                                        str(dati_base.get(COL_NOTE1, "")),
+                                        ""
+                                    ]
+                                }
 
                                 res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
                                 if res.status_code == 200:
