@@ -60,13 +60,14 @@ df = carica_dati()
 # ---------------------------------------------------------
 # DEFINIZIONE DEI TAB
 # ---------------------------------------------------------
-tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo_veicolo, tab_nuovo_cliente = st.tabs([
+tab_dash, tab_rientro, tab_storico, tab_registro, tab_nuovo_veicolo, tab_nuovo_cliente, tab_contabilita = st.tabs([
     "📊 Dashboard",
     "🔑 Rientro Veicolo",
     "📜 Storico & Ricerca",
     "📋 Registro Flotta",
     "🚗 Nuovo veicolo da aggiungere",
     "👤 Inserisci Nuovo Cliente",
+    "💰 Contabilità & Spese"
 ])
 
 # =========================================================
@@ -545,3 +546,89 @@ with tab_nuovo_cliente:
                             st.error(f"Errore imprevisto: {e}")
     else:
         st.info("Nessun dato disponibile nel sistema.")
+        
+# =========================================================
+# TAB 7: CONTABILITÀ & SPESE EXTRA
+# =========================================================
+with tab_contabilita:
+    st.subheader("💰 Gestione Spese e Ricavi Extra")
+    
+    with st.form("form_contabilita", clear_on_submit=True):
+        col_c1, col_c2 = st.columns(2)
+        with col_c1:
+            tipo_movimento = st.selectbox("Tipo di Movimento *", ["Spesa (Uscita)", "Entrata Extra"])
+            categoria_mov = st.selectbox("Categoria", [
+                "Manutenzione Straordinaria", 
+                "Assicurazione / Bollo", 
+                "Riparazione Meccanica", 
+                "Spese Amministrative / Gestione", 
+                "Carburante / Spese Varie",
+                "Altro"
+            ])
+            importo_mov = st.number_input("Importo (€) *", min_value=0.0, value=0.0, step=10.0)
+        
+        with col_c2:
+            data_mov = st.date_input("Data Movimento *", date.today())
+            riferimento_targa = st.text_input("Targa Veicolo (Opzionale)", placeholder="es. AB123CD o lascia vuoto se generico")
+            descrizione_mov = st.text_area("Descrizione / Note *", placeholder="es. Sostituzione pastiglie freni...")
+
+        submit_mov = st.form_submit_button("💾 Salva Movimento Contabile", type="primary")
+
+        if submit_mov:
+            if not descrizione_mov.strip() or importo_mov <= 0:
+                st.error("Inserisci una descrizione valida e un importo superiore a zero.")
+            else:
+                # Per le spese usiamo un valore negativo, per le entrate positivo
+                segno = -1 if tipo_movimento == "Spesa (Uscita)" else 1
+                importo_finale = importo_mov * segno
+                
+                payload = {
+                    "action": "append",
+                    COL_TARGA: riferimento_targa.upper() if riferimento_targa else "EXTRA",
+                    COL_MARCA: tipo_movimento,
+                    COL_MODELLO: categoria_mov,
+                    COL_CATEGORIA: "Contabilità",
+                    COL_PREZZO: str(importo_finale),
+                    COL_ANNO: str(data_mov.year),
+                    COL_CLIENTE: descrizione_mov.strip(),
+                    COL_STATO: "Registrato",
+                    COL_DATA_INI: str(data_mov),
+                    COL_DATA_FIN: str(data_mov),
+                    COL_COSTO: str(importo_finale),
+                    COL_KM_INIZIALI: "0",
+                    COL_KM_FINALI: "0",
+                    COL_PAGAMENTO: "N/D",
+                    COL_CAUZIONE: "0.0",
+                    COL_NOTE: descrizione_mov.strip(),
+                    COL_NOTE1: "",
+                    COL_NOTE_CHECKIN: "",
+                }
+                try:
+                    res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
+                    if res.status_code == 200:
+                        res_json = res.json()
+                        if res_json.get("status") in ["ok", "success"]:
+                            st.success(f"✅ Movimento contabile registrato con successo!")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"Errore dal server: {res_json.get('message', 'Sconosciuto')}")
+                    else:
+                        st.error(f"Errore HTTP {res.status_code}: {res.text}")
+                except Exception as e:
+                    st.error(f"Errore di connessione: {e}")
+
+    st.markdown("---")
+    st.subheader("📊 Storico Movimenti Contabili Extra")
+    
+    if not df.empty:
+        # Filtriamo le righe che appartengono alla contabilità extra
+        df_contab = df[df.astype(str).apply(lambda row: row.str.contains("Contabilità|Spesa|Entrata Extra", case=False, na=False).any(), axis=1)]
+        
+        if not df_contab.empty:
+            st.dataframe(df_contab, use_container_width=True)
+        else:
+            st.info("Nessuna spesa o entrata extra registrata nel sistema.")
+    else:
+        st.info("Nessun dato disponibile.")
