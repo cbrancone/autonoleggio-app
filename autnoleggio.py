@@ -580,33 +580,32 @@ with tab_contabilita:
             if not descrizione_mov.strip() or importo_mov <= 0:
                 st.error("Inserisci una descrizione valida e un importo superiore a zero.")
             else:
-                # Per le spese usiamo un valore negativo, per le entrate positivo
                 segno = -1 if tipo_movimento == "Spesa (Uscita)" else 1
-importo_finale = importo_mov * segno
-
-payload = {
-    "action": "append",
-    "row_data": [
-        riferimento_targa.upper() if riferimento_targa else "EXTRA", # 1. TARGA
-        tipo_movimento,                                             # 2. MARCA (o usa una colonna dedicata)
-        categoria_mov,                                              # 3. MODELLO (o categoria spesa)
-        "Contabilità",                                              # 4. CATEGORIA
-        str(importo_mov),                                           # 5. PREZZO / IMPORTO BASE
-        str(data_mov.year),                                         # 6. ANNO
-        descrizione_mov.strip(),                                    # 7. CLIENTE (usato qui come descrizione)
-        "Registrato",                                               # 8. STATO
-        str(data_mov),                                              # 9. DATA INIZIO
-        str(data_mov),                                              # 10. DATA FINE
-        str(importo_finale),                                        # 11. COSTO / IMPORTO FINALE (positivo o negativo)
-        "0",                                                        # 12. KM INIZIALI
-        "0",                                                        # 13. KM FINALI
-        "N/D",                                                      # 14. PAGAMENTO
-        "0.0",                                                      # 15. CAUZIONE
-        descrizione_mov.strip(),                                    # 16. NOTE
-        "",                                                         # 17. NOTE1
-        ""                                                          # 18. NOTE CHECK-IN
-    ]
-}
+                importo_finale = importo_mov * segno
+                
+                payload = {
+                    "action": "append",
+                    "row_data": [
+                        riferimento_targa.upper() if riferimento_targa else "EXTRA", # 1. TARGA
+                        tipo_movimento,                                             # 2. MARCA
+                        categoria_mov,                                              # 3. MODELLO
+                        "Contabilità",                                              # 4. CATEGORIA
+                        str(importo_mov),                                           # 5. PREZZO
+                        str(data_mov.year),                                         # 6. ANNO
+                        descrizione_mov.strip(),                                    # 7. CLIENTE
+                        "Registrato",                                               # 8. STATO
+                        str(data_mov),                                              # 9. DATA INIZIO
+                        str(data_mov),                                              # 10. DATA FINE
+                        str(importo_finale),                                        # 11. COSTO / IMPORTO FINALE
+                        "0",                                                        # 12. KM INIZIALI
+                        "0",                                                        # 13. KM FINALI
+                        "N/D",                                                      # 14. PAGAMENTO
+                        "0.0",                                                      # 15. CAUZIONE
+                        descrizione_mov.strip(),                                    # 16. NOTE
+                        "",                                                         # 17. NOTE1
+                        ""                                                          # 18. NOTE CHECK-IN
+                    ]
+                }
                 try:
                     res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
                     if res.status_code == 200:
@@ -627,7 +626,6 @@ payload = {
     st.subheader("📊 Storico Movimenti Contabili Extra")
     
     if not df.empty:
-        # Filtriamo le righe che appartengono alla contabilità extra
         df_contab = df[df.astype(str).apply(lambda row: row.str.contains("Contabilità|Spesa|Entrata Extra", case=False, na=False).any(), axis=1)]
         
         if not df_contab.empty:
