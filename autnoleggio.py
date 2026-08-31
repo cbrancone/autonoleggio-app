@@ -583,29 +583,28 @@ with tab_contabilita:
                 segno = -1 if tipo_movimento == "Spesa (Uscita)" else 1
                 importo_finale = importo_mov * segno
                 
-                payload = {
-                    "action": "append",
-                    "row_data": [
-                        riferimento_targa.upper() if riferimento_targa else "EXTRA", # 1. TARGA
-                        tipo_movimento,                                             # 2. MARCA
-                        categoria_mov,                                              # 3. MODELLO
-                        "Contabilità",                                              # 4. CATEGORIA
-                        str(importo_mov),                                           # 5. PREZZO
-                        str(data_mov.year),                                         # 6. ANNO
-                        descrizione_mov.strip(),                                    # 7. CLIENTE
-                        "Registrato",                                               # 8. STATO
-                        str(data_mov),                                              # 9. DATA INIZIO
-                        str(data_mov),                                              # 10. DATA FINE
-                        str(importo_finale),                                        # 11. COSTO / IMPORTO FINALE
-                        "0",                                                        # 12. KM INIZIALI
-                        "0",                                                        # 13. KM FINALI
-                        "N/D",                                                      # 14. PAGAMENTO
-                        "0.0",                                                      # 15. CAUZIONE
-                        descrizione_mov.strip(),                                    # 16. NOTE
-                        "",                                                         # 17. NOTE1
-                        ""                                                          # 18. NOTE CHECK-IN
-                    ]
-                }
+               payload = {
+    "action": "append",
+    COL_TARGA: riferimento_targa.upper() if riferimento_targa else "EXTRA",
+    COL_MARCA: tipo_movimento,
+    COL_MODELLO: categoria_mov,
+    COL_CATEGORIA: "Contabilità",
+    "TIPO MOVIMENTO": tipo_movimento, # <-- Esempio di nuova colonna aggiunta nel foglio
+    COL_PREZZO: str(importo_mov),
+    COL_ANNO: str(data_mov.year),
+    COL_CLIENTE: descrizione_mov.strip(),
+    COL_STATO: "Registrato",
+    COL_DATA_INI: str(data_mov),
+    COL_DATA_FIN: str(data_mov),
+    COL_COSTO: str(importo_finale),
+    COL_KM_INIZIALI: "0",
+    COL_KM_FINALI: "0",
+    COL_PAGAMENTO: "N/D",
+    COL_CAUZIONE: "0.0",
+    COL_NOTE: descrizione_mov.strip(),
+    COL_NOTE1: "",
+    COL_NOTE_CHECKIN: ""
+}
                 try:
                     res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
                     if res.status_code == 200:
