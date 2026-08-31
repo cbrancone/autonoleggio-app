@@ -591,7 +591,7 @@ with tab_contabilita:
                     "action": "append",
                     COL_TARGA: riferimento_targa.upper() if riferimento_targa else "EXTRA",
                     COL_MARCA: tipo_movimento,
-                    COL_MODELLO: categoria_mov,
+                    COL_MODELLO: str(modello),
                     COL_CATEGORIA: "Contabilità",
                     COL_PREZZO: str(importo_mov),
                     COL_ANNO: str(data_mov.year),
