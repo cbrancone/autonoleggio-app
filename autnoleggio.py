@@ -580,10 +580,14 @@ with tab_contabilita:
             if not descrizione_mov.strip() or importo_mov <= 0:
                 st.error("Inserisci una descrizione valida e un importo superiore a zero.")
             else:
-                tipo_voce = "Uscita" if tipo_movimento == "Spesa (Uscita)" else "Entrata"
+               tipo_voce = "Uscita" if tipo_movimento == "Spesa (Uscita)" else "Entrata"
                 segno = -1 if tipo_movimento == "Spesa (Uscita)" else 1
                 importo_finale = importo_mov * segno
                 
+                # Definiamo cosa va nella colonna Entrate/Uscite (l'importo) e cosa in Manutenzione (la descrizione/categoria)
+                valore_entrate_uscite = str(importo_finale) if tipo_voce == "Uscita" else str(importo_mov)
+                valore_manutenzione = categoria_mov if tipo_movimento == "Spesa (Uscita)" else ""
+
                 payload = {
                     "action": "append",
                     COL_TARGA: riferimento_targa.upper() if riferimento_targa else "EXTRA",
@@ -603,8 +607,8 @@ with tab_contabilita:
                     "KM_FINALI": "0",
                     "PAGAMENTO": "N/D",
                     "CAUZIONE": "0.0",
-                    "ENTRATE/USCITE": tipo_voce,
-                    "MANUTENZIONE": categoria_mov if tipo_movimento == "Spesa (Uscita)" else ""
+                    "ENTRATE/USCITE": valore_entrate_uscite,
+                    "MANUTENZIONE": valore_manutenzione
                 }
                 
                 try:
