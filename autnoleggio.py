@@ -583,28 +583,28 @@ with tab_contabilita:
                 segno = -1 if tipo_movimento == "Spesa (Uscita)" else 1
                 importo_finale = importo_mov * segno
                 
-               payload = {
-    "action": "append",
-    COL_TARGA: riferimento_targa.upper() if riferimento_targa else "EXTRA",
-    COL_MARCA: tipo_movimento,
-    COL_MODELLO: categoria_mov,
-    COL_CATEGORIA: "Contabilità",
-    "TIPO MOVIMENTO": tipo_movimento, # <-- Esempio di nuova colonna aggiunta nel foglio
-    COL_PREZZO: str(importo_mov),
-    COL_ANNO: str(data_mov.year),
-    COL_CLIENTE: descrizione_mov.strip(),
-    COL_STATO: "Registrato",
-    COL_DATA_INI: str(data_mov),
-    COL_DATA_FIN: str(data_mov),
-    COL_COSTO: str(importo_finale),
-    COL_KM_INIZIALI: "0",
-    COL_KM_FINALI: "0",
-    COL_PAGAMENTO: "N/D",
-    COL_CAUZIONE: "0.0",
-    COL_NOTE: descrizione_mov.strip(),
-    COL_NOTE1: "",
-    COL_NOTE_CHECKIN: ""
-}
+                payload = {
+                    "action": "append",
+                    COL_TARGA: riferimento_targa.upper() if riferimento_targa else "EXTRA",
+                    COL_MARCA: tipo_movimento,
+                    COL_MODELLO: categoria_mov,
+                    COL_CATEGORIA: "Contabilità",
+                    COL_PREZZO: str(importo_mov),
+                    COL_ANNO: str(data_mov.year),
+                    COL_CLIENTE: descrizione_mov.strip(),
+                    COL_STATO: "Registrato",
+                    COL_DATA_INI: str(data_mov),
+                    COL_DATA_FIN: str(data_mov),
+                    COL_COSTO: str(importo_finale),
+                    COL_KM_INIZIALI: "0",
+                    COL_KM_FINALI: "0",
+                    COL_PAGAMENTO: "N/D",
+                    COL_CAUZIONE: "0.0",
+                    COL_NOTE: descrizione_mov.strip(),
+                    COL_NOTE1: "",
+                    COL_NOTE_CHECKIN: ""
+                }
+                
                 try:
                     res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=15)
                     if res.status_code == 200:
