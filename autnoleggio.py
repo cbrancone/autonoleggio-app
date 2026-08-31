@@ -595,7 +595,7 @@ with tab_contabilita:
                     COL_CATEGORIA: "Contabilità",
                     COL_PREZZO: str(importo_mov),
                     COL_ANNO: str(data_mov.year),
-                    COL_CLIENTE: descrizione_mov.strip(),
+                    COL_CLIENTE: "",
                     COL_STATO: "Registrato",
                     COL_DATA_INI: str(data_mov),
                     COL_DATA_FIN: str(data_mov),
