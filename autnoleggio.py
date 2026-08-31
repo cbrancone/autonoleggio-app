@@ -580,7 +580,9 @@ with tab_contabilita:
             if not descrizione_mov.strip() or importo_mov <= 0:
                 st.error("Inserisci una descrizione valida e un importo superiore a zero.")
             else:
-                segno = -1 if tipo_voce = "Uscita" if tipo_movimento == "Spesa (Uscita)" else "Entrata"
+                tipo_voce = "Uscita" if tipo_movimento == "Spesa (Uscita)" else "Entrata"
+                segno = -1 if tipo_movimento == "Spesa (Uscita)" else 1
+                importo_finale = importo_mov * segno
                 
                 payload = {
                     "action": "append",
