@@ -580,8 +580,7 @@ with tab_contabilita:
             if not descrizione_mov.strip() or importo_mov <= 0:
                 st.error("Inserisci una descrizione valida e un importo superiore a zero.")
             else:
-                segno = -1 if tipo_movimento == "Spesa (Uscita)" else 1
-                importo_finale = importo_mov * segno
+                segno = -1 if tipo_voce = "Uscita" if tipo_movimento == "Spesa (Uscita)" else "Entrata"
                 
                 payload = {
                     "action": "append",
@@ -595,14 +594,15 @@ with tab_contabilita:
                     COL_STATO: "Registrato",
                     COL_DATA_INI: str(data_mov),
                     COL_DATA_FIN: str(data_mov),
-                    COL_COSTO: str(importo_finale),
-                    COL_KM_INIZIALI: "0",
-                    COL_KM_FINALI: "0",
-                    COL_PAGAMENTO: "N/D",
-                    COL_CAUZIONE: "0.0",
-                    COL_NOTE: descrizione_mov.strip(),
-                    COL_NOTE1: "",
-                    COL_NOTE_CHECKIN: ""
+                    "Note": descrizione_mov.strip(),
+                    "Note1": "",
+                    "Note Check In": "",
+                    "KM_INIZIALI": "0",
+                    "KM_FINALI": "0",
+                    "PAGAMENTO": "N/D",
+                    "CAUZIONE": "0.0",
+                    "ENTRATE/USCITE": tipo_voce,
+                    "MANUTENZIONE": categoria_mov if tipo_movimento == "Spesa (Uscita)" else ""
                 }
                 
                 try:
