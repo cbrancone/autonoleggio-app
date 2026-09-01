@@ -35,16 +35,14 @@ def check_password():
     """Restituisce True se l'utente ha inserito username e password corretti."""
     
     def password_entered():
-        """Verifica le credenziali inserite dall'utente."""
+        """Verifica le credenziali inserite dall'utente (Test rapido)."""
         username = st.session_state["username"]
         password = st.session_state["password"]
         
-        # Recupera le credenziali dai secrets di Streamlit (.streamlit/secrets.toml)
-        passwords_dict = st.secrets.get("passwords", {})
-        
-        if username in passwords_dict and passwords_dict[username] == password:
+        # Credenziali di test dirette nel codice
+        if username == "admin" and password == "12345":
             st.session_state["password_correct"] = True
-            del st.session_state["password"]  # Non conservare la password in chiaro
+            del st.session_state["password"]
             del st.session_state["username"]
         else:
             st.session_state["password_correct"] = False
