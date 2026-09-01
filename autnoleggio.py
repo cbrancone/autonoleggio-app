@@ -42,7 +42,7 @@ if not st.session_state["password_correct"]:
     
     if st.button("Accedi", type="primary"):
         # Credenziali di test fisse (puoi cambiarle qui direttamente)
-        if username_input == "admin" and password_input == "12345":
+        if username_input == "flotta" and password_input == "Pa$$Admin12345":
             st.session_state["password_correct"] = True
             st.rerun()
         else:
