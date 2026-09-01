@@ -29,6 +29,47 @@ COL_PAGAMENTO = "PAGAMENTO"
 COL_CAUZIONE = "CAUZIONE"
 
 # =========================================================
+# SISTEMA DI AUTENTICAZIONE (LOGIN)
+# =========================================================
+def check_password():
+    """Restituisce True se l'utente ha inserito username e password corretti."""
+    
+    def password_entered():
+        """Verifica le credenziali inserite dall'utente."""
+        username = st.session_state["username"]
+        password = st.session_state["password"]
+        
+        # Recupera le credenziali dai secrets di Streamlit (.streamlit/secrets.toml)
+        passwords_dict = st.secrets.get("passwords", {})
+        
+        if username in passwords_dict and passwords_dict[username] == password:
+            st.session_state["password_correct"] = True
+            del st.session_state["password"]  # Non conservare la password in chiaro
+            del st.session_state["username"]
+        else:
+            st.session_state["password_correct"] = False
+
+    # Se l'utente ha già fatto il login con successo
+    if st.session_state.get("password_correct", False):
+        return True
+
+    # Mostra la schermata di login se non è autenticato
+    st.markdown("## 🔐 Accesso Riservato - Gestionale Flotta")
+    with st.form("form_login"):
+        st.text_input("Username", key="username")
+        st.text_input("Password", type="password", key="password")
+        st.form_submit_button("Accedi", on_click=password_entered, type="primary")
+
+    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
+        st.error("😕 Username o password errati. Riprova.")
+    
+    return False
+
+# Blocca l'esecuzione dello script se il login non è avvenuto
+if not check_password():
+    st.stop()
+
+# =========================================================
 # FUNZIONE DI CARICAMENTO DATI DA GOOGLE SHEETS
 # =========================================================
 @st.cache_data(ttl=10)
@@ -252,7 +293,6 @@ with tab_registro:
     st.subheader("📋 Registro Completo della Flotta & Gestione")
     
     if not df.empty:
-        # ---> NUOVO: Filtro rapido per stato della flotta
         c_stato_reg = COL_STATO if COL_STATO in df.columns else "Stato Veicolo"
         
         if c_stato_reg in df.columns:
@@ -273,7 +313,6 @@ with tab_registro:
             elif filtro_stato == "🟠 Solo in Manutenzione":
                 df_reg_view = df_reg_view[df_reg_view['stato_c'].str.contains("manutenzione", na=False)]
                 
-            # Rimuoviamo la colonna d'appoggio temporanea prima di mostrarla
             if 'stato_c' in df_reg_view.columns:
                 df_reg_view = df_reg_view.drop(columns=['stato_c'])
                 
@@ -284,14 +323,12 @@ with tab_registro:
         st.markdown("---")
         st.subheader("⚙️ Gestione Veicolo (Modifica Dati, Cliente & Eliminazione)")
         
-        # Selezione del veicolo da modificare/eliminare tramite la targa
         c_targa = COL_TARGA if COL_TARGA in df.columns else "TARGA"
         targhe_disponibili = df[c_targa].astype(str).tolist() if c_targa in df.columns else []
         
         if targhe_disponibili:
             targa_selezionata_ges = st.selectbox("Seleziona la Targa del veicolo da gestire", targhe_disponibili, key="sel_ges_veicolo")
             
-            # Recupera i dati attuali del veicolo selezionato
             riga_veicolo = df[df[c_targa].astype(str) == targa_selezionata_ges]
             
             if not riga_veicolo.empty:
@@ -309,7 +346,7 @@ with tab_registro:
                     with col_m2:
                         mod_anno = st.number_input("Anno", value=int(dati_v.get(COL_ANNO, 2023) or 2023))
                         mod_stato = st.selectbox("Stato", ["Disponibile", "Noleggiata", "In Manutenzione"], 
-                                               index=0 if str(dati_v.get(COL_STATO, "")).lower() == "disponibile" else 1)
+                                                 index=0 if str(dati_v.get(COL_STATO, "")).lower() == "disponibile" else 1)
                         mod_cliente = st.text_input("Cliente", value=str(dati_v.get(COL_CLIENTE, "N/D")))
                         mod_note = st.text_input("Note", value=str(dati_v.get(COL_NOTE, "")))
 
@@ -347,7 +384,7 @@ with tab_registro:
                         try:
                             df_del = df.drop(idx_orig).reset_index(drop=True)
                             rows_payload = df_del.fillna("").astype(str).to_dict(orient="records")
-                            payload = {"action=":"update_all", "rows": rows_payload}
+                            payload = {"action": "update_all", "rows": rows_payload}
 
                             res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
                             if res.status_code == 200 and res.json().get("status") in ["ok", "success"]:
@@ -591,7 +628,7 @@ with tab_contabilita:
                     "action": "append",
                     COL_TARGA: riferimento_targa.upper() if riferimento_targa else "EXTRA",
                     COL_MARCA: tipo_movimento,
-                    COL_MODELLO: str(modello),
+                    COL_MODELLO: "",
                     COL_CATEGORIA: "Contabilità",
                     COL_PREZZO: str(importo_mov),
                     COL_ANNO: str(data_mov.year),
@@ -615,7 +652,7 @@ with tab_contabilita:
                     if res.status_code == 200:
                         res_json = res.json()
                         if res_json.get("status") in ["ok", "success"]:
-                            st.success(f"✅ Movimento contabile registrato con successo!")
+                            st.success("✅ Movimento contabile registrato con successo!")
                             st.cache_data.clear()
                             time.sleep(1)
                             st.rerun()
@@ -635,6 +672,4 @@ with tab_contabilita:
         if not df_contab.empty:
             st.dataframe(df_contab, use_container_width=True)
         else:
-            st.info("Nessuna spesa o entrata extra registrata nel sistema.")
-    else:
-        st.info("Nessun dato disponibile.")
+            st.info("Nessun movimento contabile registrato.")
