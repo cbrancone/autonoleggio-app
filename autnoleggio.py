@@ -50,7 +50,20 @@ if not st.session_state["password_correct"]:
             
     # Blocca l'esecuzione finché non si effettua il login
     st.stop()
-
+    
+# =========================================================
+# BARRA LATERALE (SIDEBAR) - LOGOUT E INFO
+# =========================================================
+with st.sidebar:
+    st.markdown("### 👤 Area Utente")
+    st.write("Accesso effettuato come: **Admin**")
+    
+    if st.button("🚪 Logout", type="secondary"):
+        st.session_state["password_correct"] = False
+        st.rerun()
+    
+    st.markdown("---")
+    
 # =========================================================
 # FUNZIONE DI CARICAMENTO DATI DA GOOGLE SHEETS
 # =========================================================
