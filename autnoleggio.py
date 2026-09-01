@@ -29,42 +29,26 @@ COL_PAGAMENTO = "PAGAMENTO"
 COL_CAUZIONE = "CAUZIONE"
 
 # =========================================================
-# SISTEMA DI AUTENTICAZIONE (LOGIN)
+# SISTEMA DI AUTENTICAZIONE (LOGIN SEMPLIFICATO)
 # =========================================================
-def check_password():
-    """Restituisce True se l'utente ha inserito username e password corretti."""
-    
-    def password_entered():
-        """Verifica le credenziali inserite dall'utente (Test rapido)."""
-        username = st.session_state["username"]
-        password = st.session_state["password"]
-        
-        # Credenziali di test dirette nel codice
-        if username == "admin" and password == "12345":
-            st.session_state["password_correct"] = True
-            del st.session_state["password"]
-            del st.session_state["username"]
-        else:
-            st.session_state["password_correct"] = False
+if "password_correct" not in st.session_state:
+    st.session_state["password_correct"] = False
 
-    # Se l'utente ha già fatto il login con successo
-    if st.session_state.get("password_correct", False):
-        return True
-
-    # Mostra la schermata di login se non è autenticato
+if not st.session_state["password_correct"]:
     st.markdown("## 🔐 Accesso Riservato - Gestionale Flotta")
-    with st.form("form_login"):
-        st.text_input("Username", key="username")
-        st.text_input("Password", type="password", key="password")
-        st.form_submit_button("Accedi", on_click=password_entered, type="primary")
-
-    if "password_correct" in st.session_state and not st.session_state["password_correct"]:
-        st.error("😕 Username o password errati. Riprova.")
     
-    return False
-
-# Blocca l'esecuzione dello script se il login non è avvenuto
-if not check_password():
+    username_input = st.text_input("Username", key="login_user")
+    password_input = st.text_input("Password", type="password", key="login_pass")
+    
+    if st.button("Accedi", type="primary"):
+        # Credenziali di test fisse (puoi cambiarle qui direttamente)
+        if username_input == "admin" and password_input == "12345":
+            st.session_state["password_correct"] = True
+            st.rerun()
+        else:
+            st.error("😕 Username o password errati. Riprova.")
+            
+    # Blocca l'esecuzione finché non si effettua il login
     st.stop()
 
 # =========================================================
