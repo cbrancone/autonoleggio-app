@@ -538,43 +538,44 @@ with tab_nuovo_cliente:
                                 giorni = 1 if giorni < 1 else giorni
                                 costo_totale = giorni * prezzo_personalizzato
 
-                        payload = {
-                            "action": "append",
-                            COL_TARGA: str(targa_selezionata),
-                            COL_MARCA: str(dati_base.get(COL_MARCA, "")),
-                            COL_MODELLO: str(dati_base.get(COL_MODELLO, "")),
-                            COL_CATEGORIA: str(dati_base.get(COL_CATEGORIA, "")),
-                            COL_PREZZO: str(prezzo_personalizzato),
-                            COL_ANNO: str(dati_base.get(COL_ANNO, "")),
-                            COL_CLIENTE: nome_cliente.strip(),
-                            COL_STATO: str(stato_nuovo),
-                            COL_DATA_INI: str(data_inizio_cli),
-                            COL_DATA_FIN: str(data_fine_cli),
-                            COL_COSTO: str(costo_totale),
-                            COL_KM_INIZIALI: str(dati_base.get(COL_KM_INIZIALI, "0")),
-                            COL_KM_FINALI: "",
-                            COL_PAGAMENTO: str(metodo_pagamento),
-                            COL_CAUZIONE: str(cauzione_importo),
-                            COL_NOTE: note_cli.strip() if note_cli.strip() else "",
-                            COL_NOTE1: str(dati_base.get(COL_NOTE1, "")),
-                            COL_NOTE_CHECKIN: ""
-                        }
+                                payload = {
+                                    "action": "append",
+                                    COL_TARGA: str(targa_selezionata),
+                                    COL_MARCA: str(dati_base.get(COL_MARCA, "")),
+                                    COL_MODELLO: str(dati_base.get(COL_MODELLO, "")),
+                                    COL_CATEGORIA: str(dati_base.get(COL_CATEGORIA, "")),
+                                    COL_PREZZO: str(prezzo_personalizzato),
+                                    COL_ANNO: str(dati_base.get(COL_ANNO, "")),
+                                    COL_CLIENTE: nome_cliente.strip(),
+                                    COL_STATO: str(stato_nuovo),
+                                    COL_DATA_INI: str(data_inizio_cli),
+                                    COL_DATA_FIN: str(data_fine_cli),
+                                    COL_COSTO: str(costo_totale),
+                                    COL_KM_INIZIALI: str(dati_base.get(COL_KM_INIZIALI, "0")),
+                                    COL_KM_FINALI: "",
+                                    COL_PAGAMENTO: str(metodo_pagamento),
+                                    COL_CAUZIONE: str(cauzione_importo),
+                                    COL_NOTE: note_cli.strip() if note_cli.strip() else "",
+                                    COL_NOTE1: str(dati_base.get(COL_NOTE1, "")),
+                                    COL_NOTE_CHECKIN: ""
+                                }
 
-                        try:
-                            res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
-                            if res.status_code == 200:
-                                res_json = res.json()
-                                if res_json.get("status") in ["ok", "success"]:
-                                    st.success(f"✅ Nuovo noleggio registrato con successo per {nome_cliente} (Veicolo {targa_selezionata})!")
-                                    st.cache_data.clear()
-                                    time.sleep(1)
-                                    st.rerun()
+                                res = requests.post(APPS_SCRIPT_URL, json=payload, timeout=20)
+                                if res.status_code == 200:
+                                    res_json = res.json()
+                                    if res_json.get("status") in ["ok", "success"]:
+                                        st.success(f"✅ Nuovo noleggio registrato con successo per {nome_cliente} (Veicolo {targa_selezionata})!")
+                                        st.cache_data.clear()
+                                        time.sleep(1)
+                                        st.rerun()
+                                    else:
+                                        st.error(f"Errore dal server: {res_json.get('message', 'Sconosciuto')}")
                                 else:
-                                    st.error(f"Errore dal server: {res_json.get('message', 'Sconosciuto')}")
+                                    st.error(f"Errore HTTP {res.status_code}: {res.text}")
                             else:
-                                st.error(f"Errore HTTP {res.status_code}: {res.text}")
+                                st.error(f"Impossibile trovare la targa {targa_selezionata} nel database.")
                         except Exception as e:
-                            st.error(f"Errore di connessione: {e}")
+                            st.error(f"Errore imprevisto: {e}")
     else:
         st.info("Nessun dato disponibile nel sistema.")
         
