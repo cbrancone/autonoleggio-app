@@ -150,6 +150,17 @@ def normalizza_tipo_record(row):
 
 
 def prepara_dataframe(df_input):
+    """
+    Prepara il DataFrame senza MAI spostare i dati tra colonne.
+
+    Regola fondamentale per la contabilità:
+    - MARCA resta vuota
+    - MODELLO resta vuoto
+    - CATEGORIA = Contabilità
+    - NOTE = descrizione della spesa/entrata
+    - NOTE1 = tipo movimento (Spesa (Uscita) / Entrata Extra)
+    - ENTRATE/USCITE = importo positivo o negativo
+    """
     df_out = df_input.copy()
 
     for col in COLONNE_ATTESE:
@@ -159,8 +170,42 @@ def prepara_dataframe(df_input):
     # Determina il tipo per i dati vecchi che non avevano la colonna.
     df_out[COL_TIPO_RECORD] = df_out.apply(normalizza_tipo_record, axis=1)
 
-    # Per i vecchi noleggi calcola il costo se manca.
+    # Ripara automaticamente i vecchi record CONTABILITA che avevano
+    # erroneamente il tipo movimento dentro MARCA.
+    tipi_contabilita = {
+        "spesa (uscita)",
+        "entrata extra",
+        "spesa",
+        "uscita",
+        "entrata"
+    }
+
     for idx in df_out.index:
+        if df_out.loc[idx, COL_TIPO_RECORD] == TIPO_CONTABILITA:
+            marca = str(df_out.loc[idx, COL_MARCA]).strip()
+            note1 = str(df_out.loc[idx, COL_NOTE1]).strip()
+
+            # Se il vecchio codice aveva messo il tipo movimento in MARCA,
+            # lo spostiamo nella colonna corretta NOTE1.
+            if marca.lower() in tipi_contabilita:
+                if not note1:
+                    df_out.loc[idx, COL_NOTE1] = marca
+                df_out.loc[idx, COL_MARCA] = ""
+
+            # Una riga contabile non deve avere dati di marca/modello.
+            df_out.loc[idx, COL_MARCA] = ""
+            df_out.loc[idx, COL_MODELLO] = ""
+            df_out.loc[idx, COL_CATEGORIA] = "Contabilità"
+
+            # Se manca Note1, ricaviamo il tipo dal segno dell'importo.
+            if not str(df_out.loc[idx, COL_NOTE1]).strip():
+                movimento = valore_numero(df_out.loc[idx, COL_ENTRATE_USCITE], 0)
+                if movimento < 0:
+                    df_out.loc[idx, COL_NOTE1] = "Spesa (Uscita)"
+                elif movimento > 0:
+                    df_out.loc[idx, COL_NOTE1] = "Entrata Extra"
+
+        # Per i vecchi noleggi calcola il costo se manca.
         if df_out.loc[idx, COL_TIPO_RECORD] == TIPO_NOLEGGIO:
             costo = valore_numero(df_out.loc[idx, COL_COSTO], 0)
             if costo <= 0:
@@ -992,10 +1037,12 @@ with tab_contabilita:
             valore = -abs(importo) if tipo == "Spesa (Uscita)" else abs(importo)
             manutenzione = categoria if tipo == "Spesa (Uscita)" else ""
 
+            # MAPPATURA ESPLICITA: ogni dato va nella sua colonna.
+            # In particolare il tipo di movimento NON va in MARCA: va in NOTE1.
             payload = {
                 "action": "append",
                 COL_TARGA: targa.upper().strip() if targa.strip() else "EXTRA",
-                COL_MARCA: tipo,
+                COL_MARCA: "",
                 COL_MODELLO: "",
                 COL_CATEGORIA: "Contabilità",
                 COL_PREZZO: str(importo),
@@ -1005,7 +1052,7 @@ with tab_contabilita:
                 COL_DATA_INI: str(data_mov),
                 COL_DATA_FIN: str(data_mov),
                 COL_NOTE: descrizione.strip(),
-                COL_NOTE1: "",
+                COL_NOTE1: tipo,
                 COL_NOTE_CHECKIN: "",
                 COL_KM_INIZIALI: "0",
                 COL_KM_FINALI: "0",
