@@ -888,9 +888,11 @@ with tab_nuovo_cliente:
                         df_mod.loc[idx_veicolo, COL_STATO] = "Noleggiata"
                         df_mod.loc[idx_veicolo, COL_CLIENTE] = nome_cliente.strip()
                     else:
-                        # Il veicolo resta selezionabile per periodi diversi: l'occupazione è verificata sulle date.
-                        df_mod.loc[idx_veicolo, COL_STATO] = "Prenotata"
-                        df_mod.loc[idx_veicolo, COL_CLIENTE] = nome_cliente.strip()
+                        # La prenotazione futura NON rende indisponibile il veicolo in assoluto.
+                        # Lo stato generale della scheda veicolo resta invariato; la disponibilità
+                        # viene verificata sulle date tramite la riga PRENOTAZIONE.
+                        # In questo modo il veicolo può essere noleggiato in periodi non sovrapposti.
+                        pass
 
                     nuova_riga = {c: "" for c in COLONNE_ATTESE}
                     nuova_riga.update({
@@ -986,13 +988,8 @@ with tab_prenotazioni:
                 altre = df_mod[(df_mod[COL_TIPO_RECORD] == TIPO_PRENOTAZIONE) & (df_mod[COL_STATO].astype(str).str.lower() != "annullata") & (df_mod[COL_TARGA].astype(str).str.strip().str.upper() == targa)]
                 veicoli = righe_veicoli(df_mod)
                 veicoli = veicoli[veicoli[COL_TARGA].astype(str).str.strip().str.upper() == targa]
-                if not altre.empty:
-                    idx_v = veicoli.index[0]
-                    df_mod.loc[idx_v, COL_STATO] = "Prenotata"
-                elif not veicoli.empty and str(df_mod.loc[veicoli.index[0], COL_STATO]).strip().lower() == "prenotata":
-                    idx_v = veicoli.index[0]
-                    df_mod.loc[idx_v, COL_STATO] = "Disponibile"
-                    df_mod.loc[idx_v, COL_CLIENTE] = "N/D"
+                # Lo stato generale del veicolo non viene modificato: le prenotazioni
+                # attive sono considerate dal controllo di disponibilità in base alle date.
                 ok, risposta = invia_payload({"action": "update_all", "rows": payload_dataframe(df_mod)})
                 if ok:
                     st.success("Prenotazione annullata.")
