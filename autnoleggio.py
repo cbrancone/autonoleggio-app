@@ -42,6 +42,7 @@ COL_TIPO_RECORD = "TIPO RECORD"
 
 TIPO_VEICOLO = "VEICOLO"
 TIPO_NOLEGGIO = "NOLEGGIO"
+TIPO_PRENOTAZIONE = "PRENOTAZIONE"
 TIPO_CONTABILITA = "CONTABILITA"
 
 COLONNE_ATTESE = [
@@ -132,7 +133,7 @@ def costo_riga_noleggio(row):
 
 def normalizza_tipo_record(row):
     tipo = str(row.get(COL_TIPO_RECORD, "")).strip().upper()
-    if tipo in [TIPO_VEICOLO, TIPO_NOLEGGIO, TIPO_CONTABILITA]:
+    if tipo in [TIPO_VEICOLO, TIPO_NOLEGGIO, TIPO_PRENOTAZIONE, TIPO_CONTABILITA]:
         return tipo
 
     categoria = str(row.get(COL_CATEGORIA, "")).strip().lower()
@@ -285,6 +286,51 @@ def righe_contabilita(df):
     return df[df[COL_TIPO_RECORD] == TIPO_CONTABILITA].copy()
 
 
+def righe_prenotazioni(df, solo_attive=True):
+    pren = df[df[COL_TIPO_RECORD] == TIPO_PRENOTAZIONE].copy()
+    if solo_attive and not pren.empty:
+        pren = pren[~pren[COL_STATO].astype(str).str.strip().str.lower().isin(["annullata", "cancellata"])]
+    return pren
+
+
+def intervalli_si_sovrappongono(inizio_a, fine_a, inizio_b, fine_b):
+    a1 = pd.to_datetime(inizio_a, errors="coerce")
+    a2 = pd.to_datetime(fine_a, errors="coerce")
+    b1 = pd.to_datetime(inizio_b, errors="coerce")
+    b2 = pd.to_datetime(fine_b, errors="coerce")
+    if any(pd.isna(x) for x in [a1, a2, b1, b2]):
+        return False
+    # Le date sono considerate intervalli con estremi inclusivi.
+    return a1.date() <= b2.date() and b1.date() <= a2.date()
+
+
+def veicolo_libero_nel_periodo(df_dati, targa, inizio, fine, escludi_indice=None):
+    veicoli = righe_veicoli(df_dati)
+    corrispondenza = veicoli[veicoli[COL_TARGA].astype(str).str.strip().str.upper() == str(targa).strip().upper()]
+    if corrispondenza.empty:
+        return False, "Veicolo non trovato."
+    stato = str(corrispondenza.iloc[0].get(COL_STATO, "")).strip().lower()
+    if "manutenzione" in stato or stato in ["noleggiata", "noleggiato", "in uso"]:
+        # Se risulta noleggiata, controlliamo comunque le date: un noleggio storico
+        # non deve bloccare un periodo futuro non sovrapposto.
+        pass
+
+    impegni = df_dati[df_dati[COL_TIPO_RECORD].isin([TIPO_NOLEGGIO, TIPO_PRENOTAZIONE])]
+    for idx, riga in impegni.iterrows():
+        if escludi_indice is not None and idx == escludi_indice:
+            continue
+        if str(riga.get(COL_TARGA, "")).strip().upper() != str(targa).strip().upper():
+            continue
+        stato_record = str(riga.get(COL_STATO, "")).strip().lower()
+        if stato_record in ["annullata", "cancellata", "rientrata", "conclusa"]:
+            continue
+        if intervalli_si_sovrappongono(inizio, fine, riga.get(COL_DATA_INI, ""), riga.get(COL_DATA_FIN, "")):
+            return False, f"Periodo già occupato dal {riga.get(COL_DATA_INI, '')} al {riga.get(COL_DATA_FIN, '')} (cliente: {riga.get(COL_CLIENTE, '')})."
+    if "manutenzione" in stato:
+        return False, "Il veicolo è in manutenzione."
+    return True, "Disponibile nel periodo selezionato."
+
+
 # =========================================================
 # SIDEBAR
 # =========================================================
@@ -344,6 +390,7 @@ if colonne_mancanti:
     tab_registro,
     tab_nuovo_veicolo,
     tab_nuovo_cliente,
+    tab_prenotazioni,
     tab_fatturazione,
     tab_contabilita
 ) = st.tabs([
@@ -353,6 +400,7 @@ if colonne_mancanti:
     "📋 Registro Flotta",
     "🚗 Nuovo veicolo",
     "👤 Nuovo Cliente / Noleggio",
+    "📅 Prenotazioni",
     "🧾 Fatturazione",
     "💰 Contabilità & Spese"
 ])
@@ -368,6 +416,7 @@ with tab_dash:
     else:
         df_veicoli = righe_veicoli(df)
         df_noleggi = righe_noleggi(df)
+        df_prenotazioni = righe_prenotazioni(df)
         df_contab = righe_contabilita(df)
 
         # Stato veicoli
@@ -377,6 +426,7 @@ with tab_dash:
         disponibili = int((stato == "disponibile").sum()) if not df_veicoli.empty else 0
         noleggiate = int(stato.isin(["noleggiata", "noleggiato", "in uso"]).sum()) if not df_veicoli.empty else 0
         manutenzione = int(stato.str.contains("manutenzione", na=False).sum()) if not df_veicoli.empty else 0
+        prenotate = len(df_prenotazioni)
 
         # Entrate da noleggi
         entrate_noleggi = sum(costo_riga_noleggio(r) for _, r in df_noleggi.iterrows())
@@ -410,12 +460,13 @@ with tab_dash:
                 if stato_normalizzato(r.get(COL_STATO_FATTURA, "")) in ["emessa", "pagata"]:
                     totale_fatturato += costo_riga_noleggio(r)
 
-        c1, c2, c3, c4, c5 = st.columns(5)
+        c1, c2, c3, c4, c5, c6 = st.columns(6)
         c1.metric("🚗 Totale Veicoli", tot_veicoli)
         c2.metric("🟢 Disponibili", disponibili)
         c3.metric("🔵 Noleggiate", noleggiate)
-        c4.metric("🟠 Manutenzione", manutenzione)
-        c5.metric("🚙 Noleggi registrati", len(df_noleggi))
+        c4.metric("📅 Prenotazioni", prenotate)
+        c5.metric("🟠 Manutenzione", manutenzione)
+        c6.metric("🚙 Noleggi registrati", len(df_noleggi))
 
         st.markdown("---")
 
@@ -585,6 +636,7 @@ with tab_registro:
                 "Tutti i veicoli",
                 "🟢 Solo Disponibili",
                 "🔵 Solo Noleggiate",
+                "📅 Solo Prenotate",
                 "🟠 Solo in Manutenzione"
             ],
             horizontal=True
@@ -597,6 +649,8 @@ with tab_registro:
             view = view[stato == "disponibile"]
         elif filtro == "🔵 Solo Noleggiate":
             view = view[stato.isin(["noleggiata", "noleggiato", "in uso"])]
+        elif filtro == "📅 Solo Prenotate":
+            view = view[stato == "prenotata"]
         elif filtro == "🟠 Solo in Manutenzione":
             view = view[stato.str.contains("manutenzione", na=False)]
 
@@ -636,7 +690,7 @@ with tab_registro:
                     with b:
                         anno = int(valore_numero(dati.get(COL_ANNO, 2023), 2023))
                         anno = st.number_input("Anno", min_value=1990, max_value=2030, value=anno)
-                        stati = ["Disponibile", "Noleggiata", "In Manutenzione"]
+                        stati = ["Disponibile", "Noleggiata", "Prenotata", "In Manutenzione"]
                         stato_attuale = str(dati.get(COL_STATO, "Disponibile"))
 
                         try:
@@ -755,148 +809,193 @@ with tab_nuovo_veicolo:
                     st.error(f"Errore server: {risposta.get('message', 'Sconosciuto')}")
 
 # =========================================================
-# TAB 6 - NUOVO CLIENTE / NOLEGGIO
+# TAB 6 - NUOVO CLIENTE / NOLEGGIO / PRENOTAZIONE
 # =========================================================
 with tab_nuovo_cliente:
-    st.subheader("👤 Nuovo Cliente / Nuovo Noleggio")
+    st.subheader("👤 Nuovo Cliente / Noleggio / Prenotazione")
+    st.caption("Una prenotazione impegna il veicolo nel periodo scelto, ma non viene conteggiata come noleggio effettuato.")
+
+    modalita = st.radio("Operazione", ["Nuovo noleggio", "Nuova prenotazione"], horizontal=True)
+    cdate1, cdate2 = st.columns(2)
+    with cdate1:
+        data_inizio = st.date_input("Data inizio *", date.today(), key="data_inizio_operazione")
+    with cdate2:
+        data_fine = st.date_input("Data fine *", date.today(), key="data_fine_operazione")
 
     df_veicoli = righe_veicoli(df)
-    stato_veicoli = df_veicoli[COL_STATO].astype(str).str.strip().str.lower() if not df_veicoli.empty else pd.Series(dtype=str)
+    opzioni = []
+    mappa = {}
+    if data_fine >= data_inizio and not df_veicoli.empty:
+        for idx, r in df_veicoli.iterrows():
+            targa_corrente = str(r.get(COL_TARGA, "")).strip()
+            stato_corrente = str(r.get(COL_STATO, "")).strip().lower()
+            if "manutenzione" in stato_corrente:
+                continue
+            libero, motivo = veicolo_libero_nel_periodo(df, targa_corrente, data_inizio, data_fine)
+            # Un noleggio immediato non può partire se il veicolo risulta già occupato oggi.
+            if modalita == "Nuovo noleggio" and data_inizio <= date.today() and stato_corrente in ["noleggiata", "noleggiato", "in uso"]:
+                libero = False
+            if libero:
+                prezzo_base = valore_numero(r.get(COL_PREZZO, 50), 50)
+                label = f"{targa_corrente} - {r.get(COL_MARCA, '')} {r.get(COL_MODELLO, '')} (€{prezzo_base:.2f}/giorno)"
+                opzioni.append(label)
+                mappa[label] = (idx, targa_corrente, prezzo_base)
 
-    df_disponibili = df_veicoli[
-        stato_veicoli.isin(["disponibile", "disponibili", "libera", "libero", ""])
-    ] if not df_veicoli.empty else pd.DataFrame()
-
-    if df_disponibili.empty:
-        st.warning("⚠️ Al momento non ci sono veicoli disponibili.")
+    if data_fine < data_inizio:
+        st.error("La data di fine non può essere precedente alla data di inizio.")
+    elif not opzioni:
+        st.warning("⚠️ Nessun veicolo libero per l'intero periodo selezionato. Controlla le prenotazioni, i noleggi e la manutenzione.")
     else:
-        opzioni = []
-        mappa = {}
-
-        for idx, r in df_disponibili.iterrows():
-            targa = str(r.get(COL_TARGA, ""))
-            marca = str(r.get(COL_MARCA, ""))
-            modello = str(r.get(COL_MODELLO, ""))
-            prezzo_base = valore_numero(r.get(COL_PREZZO, 50), 50)
-
-            label = f"{targa} - {marca} {modello} (€{prezzo_base:.2f}/giorno)"
-            opzioni.append(label)
-            mappa[label] = (idx, targa, prezzo_base)
-
         with st.form("form_nuovo_cliente", clear_on_submit=True):
             c1, c2 = st.columns(2)
-
             with c1:
                 nome_cliente = st.text_input("Nome e Cognome Cliente *")
-                auto_label = st.selectbox("Seleziona Veicolo Disponibile *", opzioni)
-
+                auto_label = st.selectbox("Seleziona veicolo libero nel periodo *", opzioni)
                 prezzo_default = mappa[auto_label][2]
-                prezzo_applicato = st.number_input(
-                    "Prezzo Giornaliero Applicato (€) *",
-                    min_value=0.0,
-                    value=float(prezzo_default)
-                )
-
+                prezzo_applicato = st.number_input("Prezzo giornaliero applicato (€) *", min_value=0.0, value=float(prezzo_default))
             with c2:
-                data_inizio = st.date_input("Data Inizio Noleggio *", date.today())
-                data_fine = st.date_input("Data Fine Noleggio *", date.today())
-                pagamento = st.selectbox(
-                    "Metodo di Pagamento",
-                    ["Contanti", "Carta di Credito", "Bonifico", "Altro"]
-                )
-                cauzione = st.number_input(
-                    "Cauzione / Deposito (€)",
-                    min_value=0.0,
-                    value=0.0,
-                    step=50.0
-                )
-
+                pagamento = st.selectbox("Metodo di pagamento", ["Contanti", "Carta di Credito", "Bonifico", "Altro"])
+                cauzione = st.number_input("Cauzione / Deposito (€)", min_value=0.0, value=0.0, step=50.0)
             note = st.text_area("Note / Dettagli Cliente")
 
             st.markdown("### 🧾 Fatturazione")
             f1, f2 = st.columns(2)
-
             with f1:
                 fattura = st.selectbox("Fattura", ["No", "Sì"], index=1)
-                stato_fattura = st.selectbox(
-                    "Stato Fattura",
-                    ["Da emettere", "Emessa", "Pagata", "Annullata"]
-                )
-
+                stato_fattura = st.selectbox("Stato Fattura", ["Da emettere", "Emessa", "Pagata", "Annullata"])
             with f2:
-                numero_fattura = st.text_input(
-                    "Numero Fattura",
-                    value=numero_fattura_suggerito(df)
-                )
+                numero_fattura = st.text_input("Numero Fattura", value=numero_fattura_suggerito(df))
                 data_fattura = st.date_input("Data Fattura", date.today())
-
-            submit = st.form_submit_button(
-                "💾 Salva Cliente e Avvia Noleggio",
-                type="primary"
-            )
+            submit = st.form_submit_button("💾 Salva prenotazione" if modalita == "Nuova prenotazione" else "💾 Salva e avvia noleggio", type="primary")
 
         if submit:
             if not nome_cliente.strip():
                 st.error("Inserisci il nome del cliente.")
-            elif data_fine < data_inizio:
-                st.error("La data di fine non può essere precedente alla data di inizio.")
             else:
                 idx_veicolo, targa, _ = mappa[auto_label]
-                giorni = max(1, (data_fine - data_inizio).days)
-                costo_totale = giorni * float(prezzo_applicato)
+                libero, motivo = veicolo_libero_nel_periodo(df, targa, data_inizio, data_fine)
+                if not libero:
+                    st.error("Impossibile procedere: " + motivo)
+                elif modalita == "Nuovo noleggio" and data_inizio > date.today():
+                    st.error("Per una data futura seleziona 'Nuova prenotazione'. Il noleggio si avvia quando consegni il veicolo.")
+                else:
+                    giorni = max(1, (data_fine - data_inizio).days)
+                    costo_totale = giorni * float(prezzo_applicato)
+                    tipo_record = TIPO_PRENOTAZIONE if modalita == "Nuova prenotazione" else TIPO_NOLEGGIO
+                    stato_record = "Prenotata" if modalita == "Nuova prenotazione" else "Noleggiata"
+                    df_mod = df.copy()
+                    if modalita == "Nuovo noleggio":
+                        df_mod.loc[idx_veicolo, COL_STATO] = "Noleggiata"
+                        df_mod.loc[idx_veicolo, COL_CLIENTE] = nome_cliente.strip()
+                    else:
+                        # Il veicolo resta selezionabile per periodi diversi: l'occupazione è verificata sulle date.
+                        df_mod.loc[idx_veicolo, COL_STATO] = "Prenotata"
+                        df_mod.loc[idx_veicolo, COL_CLIENTE] = nome_cliente.strip()
 
+                    nuova_riga = {c: "" for c in COLONNE_ATTESE}
+                    nuova_riga.update({
+                        COL_TARGA: targa,
+                        COL_MARCA: df.loc[idx_veicolo, COL_MARCA],
+                        COL_MODELLO: df.loc[idx_veicolo, COL_MODELLO],
+                        COL_CATEGORIA: "Prenotazione" if modalita == "Nuova prenotazione" else "Noleggio",
+                        COL_PREZZO: float(prezzo_applicato),
+                        COL_ANNO: df.loc[idx_veicolo, COL_ANNO],
+                        COL_CLIENTE: nome_cliente.strip(),
+                        COL_STATO: stato_record,
+                        COL_DATA_INI: str(data_inizio),
+                        COL_DATA_FIN: str(data_fine),
+                        COL_NOTE: note.strip(),
+                        COL_KM_INIZIALI: df.loc[idx_veicolo, COL_KM_INIZIALI],
+                        COL_PAGAMENTO: pagamento,
+                        COL_CAUZIONE: float(cauzione),
+                        COL_ENTRATE_USCITE: float(costo_totale) if modalita == "Nuovo noleggio" else "",
+                        COL_COSTO: float(costo_totale),
+                        COL_FATTURA: fattura if modalita == "Nuovo noleggio" else "No",
+                        COL_NUMERO_FATTURA: numero_fattura.strip() if modalita == "Nuovo noleggio" and fattura == "Sì" else "",
+                        COL_DATA_FATTURA: str(data_fattura) if modalita == "Nuovo noleggio" and fattura == "Sì" else "",
+                        COL_STATO_FATTURA: stato_fattura if modalita == "Nuovo noleggio" and fattura == "Sì" else "",
+                        COL_TIPO_RECORD: tipo_record
+                    })
+                    df_mod = pd.concat([df_mod, pd.DataFrame([nuova_riga])], ignore_index=True)
+                    ok, risposta = invia_payload({"action": "update_all", "rows": payload_dataframe(df_mod)})
+                    if ok:
+                        st.success(f"✅ {'Prenotazione registrata' if modalita == 'Nuova prenotazione' else 'Noleggio avviato'} per {nome_cliente} - {targa}. Totale previsto: € {costo_totale:,.2f}.")
+                        st.cache_data.clear()
+                        time.sleep(1)
+                        st.rerun()
+                    else:
+                        st.error(f"Errore server: {risposta.get('message', 'Sconosciuto')}")
+
+# =========================================================
+# TAB 7 - PRENOTAZIONI
+# =========================================================
+with tab_prenotazioni:
+    st.subheader("📅 Gestione Prenotazioni")
+    df_pren = righe_prenotazioni(df)
+    if df_pren.empty:
+        st.info("Non ci sono prenotazioni attive.")
+    else:
+        colonne_pren = [COL_TARGA, COL_MARCA, COL_MODELLO, COL_CLIENTE, COL_DATA_INI, COL_DATA_FIN, COL_COSTO, COL_STATO, COL_NOTE]
+        st.dataframe(df_pren[colonne_pren], use_container_width=True, hide_index=True)
+        st.markdown("---")
+        opzioni_pren = {}
+        for idx, r in df_pren.iterrows():
+            etichetta = f"{r.get(COL_TARGA, '')} | {r.get(COL_CLIENTE, '')} | {r.get(COL_DATA_INI, '')} - {r.get(COL_DATA_FIN, '')}"
+            opzioni_pren[etichetta] = idx
+        scelta_pren = st.selectbox("Seleziona una prenotazione", list(opzioni_pren.keys()))
+        idx_pren = opzioni_pren[scelta_pren]
+        p1, p2 = st.columns(2)
+        with p1:
+            if st.button("✅ Conferma consegna e avvia noleggio", type="primary"):
+                r = df.loc[idx_pren]
+                targa = str(r.get(COL_TARGA, "")).strip()
+                veicolo = righe_veicoli(df)
+                veicolo = veicolo[veicolo[COL_TARGA].astype(str).str.strip().str.upper() == targa.upper()]
+                if veicolo.empty:
+                    st.error("Veicolo non trovato in flotta.")
+                elif pd.to_datetime(r.get(COL_DATA_INI, ""), errors="coerce").date() > date.today():
+                    st.error("La prenotazione è futura: potrai avviare il noleggio dalla data prevista di consegna.")
+                else:
+                    idx_v = veicolo.index[0]
+                    stato_v = str(df.loc[idx_v, COL_STATO]).strip().lower()
+                    if "manutenzione" in stato_v or stato_v in ["noleggiata", "noleggiato", "in uso"]:
+                        st.error("Il veicolo non può essere consegnato: risulta in manutenzione o già noleggiato.")
+                    else:
+                        df_mod = df.copy()
+                        df_mod.loc[idx_pren, COL_TIPO_RECORD] = TIPO_NOLEGGIO
+                        df_mod.loc[idx_pren, COL_CATEGORIA] = "Noleggio"
+                        df_mod.loc[idx_pren, COL_STATO] = "Noleggiata"
+                        df_mod.loc[idx_pren, COL_ENTRATE_USCITE] = costo_riga_noleggio(r)
+                        df_mod.loc[idx_pren, COL_FATTURA] = "No"
+                        df_mod.loc[idx_pren, COL_STATO_FATTURA] = "Da emettere"
+                        df_mod.loc[idx_v, COL_STATO] = "Noleggiata"
+                        df_mod.loc[idx_v, COL_CLIENTE] = r.get(COL_CLIENTE, "")
+                        ok, risposta = invia_payload({"action": "update_all", "rows": payload_dataframe(df_mod)})
+                        if ok:
+                            st.success("Noleggio avviato: la prenotazione è stata convertita senza creare un'altra riga.")
+                            st.cache_data.clear()
+                            time.sleep(1)
+                            st.rerun()
+                        else:
+                            st.error(f"Errore server: {risposta.get('message', 'Sconosciuto')}")
+        with p2:
+            if st.button("❌ Annulla prenotazione"):
                 df_mod = df.copy()
-
-                # 1) AGGIORNA SOLO LA RIGA DEL VEICOLO
-                #    La macchina resta una sola.
-                df_mod.loc[idx_veicolo, COL_STATO] = "Noleggiata"
-                df_mod.loc[idx_veicolo, COL_CLIENTE] = nome_cliente.strip()
-
-                # 2) CREA UNA NUOVA RIGA SOLO PER IL NOLEGGIO/STORICO
-                nuova_riga = {c: "" for c in COLONNE_ATTESE}
-                nuova_riga.update({
-                    COL_TARGA: targa,
-                    COL_MARCA: df.loc[idx_veicolo, COL_MARCA],
-                    COL_MODELLO: df.loc[idx_veicolo, COL_MODELLO],
-                    COL_CATEGORIA: "Noleggio",
-                    COL_PREZZO: float(prezzo_applicato),
-                    COL_ANNO: df.loc[idx_veicolo, COL_ANNO],
-                    COL_CLIENTE: nome_cliente.strip(),
-                    COL_STATO: "Noleggiata",
-                    COL_DATA_INI: str(data_inizio),
-                    COL_DATA_FIN: str(data_fine),
-                    COL_NOTE: note.strip(),
-                    COL_KM_INIZIALI: df.loc[idx_veicolo, COL_KM_INIZIALI],
-                    COL_KM_FINALI: "",
-                    COL_PAGAMENTO: pagamento,
-                    COL_CAUZIONE: float(cauzione),
-                    # IL NOLEGGIO È UNA ENTRATA
-                    COL_ENTRATE_USCITE: float(costo_totale),
-                    COL_MANUTENZIONE: "",
-                    COL_COSTO: float(costo_totale),
-                    COL_FATTURA: fattura,
-                    COL_NUMERO_FATTURA: numero_fattura.strip() if fattura == "Sì" else "",
-                    COL_DATA_FATTURA: str(data_fattura) if fattura == "Sì" else "",
-                    COL_STATO_FATTURA: stato_fattura if fattura == "Sì" else "Da emettere",
-                    COL_TIPO_RECORD: TIPO_NOLEGGIO
-                })
-
-                df_mod = pd.concat(
-                    [df_mod, pd.DataFrame([nuova_riga])],
-                    ignore_index=True
-                )
-
-                ok, risposta = invia_payload({
-                    "action": "update_all",
-                    "rows": payload_dataframe(df_mod)
-                })
-
+                df_mod.loc[idx_pren, COL_STATO] = "Annullata"
+                targa = str(df_mod.loc[idx_pren, COL_TARGA]).strip().upper()
+                altre = df_mod[(df_mod[COL_TIPO_RECORD] == TIPO_PRENOTAZIONE) & (df_mod[COL_STATO].astype(str).str.lower() != "annullata") & (df_mod[COL_TARGA].astype(str).str.strip().str.upper() == targa)]
+                veicoli = righe_veicoli(df_mod)
+                veicoli = veicoli[veicoli[COL_TARGA].astype(str).str.strip().str.upper() == targa]
+                if not altre.empty:
+                    idx_v = veicoli.index[0]
+                    df_mod.loc[idx_v, COL_STATO] = "Prenotata"
+                elif not veicoli.empty and str(df_mod.loc[veicoli.index[0], COL_STATO]).strip().lower() == "prenotata":
+                    idx_v = veicoli.index[0]
+                    df_mod.loc[idx_v, COL_STATO] = "Disponibile"
+                    df_mod.loc[idx_v, COL_CLIENTE] = "N/D"
+                ok, risposta = invia_payload({"action": "update_all", "rows": payload_dataframe(df_mod)})
                 if ok:
-                    st.success(
-                        f"✅ Noleggio registrato per {nome_cliente} - {targa}. "
-                        f"Totale: € {costo_totale:,.2f}. "
-                        "La macchina non è stata duplicata."
-                    )
+                    st.success("Prenotazione annullata.")
                     st.cache_data.clear()
                     time.sleep(1)
                     st.rerun()
